@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /Users/cameron/ScrivenerReader && git add -A && git commit -m 'auto: save changes' && git push 2>/dev/null || true"
+          }
+        ]
+      }
+    ]
+  }
+}
