@@ -1,0 +1,18 @@
+# Swift Package Manager
+.build/
+*.o
+*.d
+
+# Xcode / macOS
+.DS_Store
+*.xcuserstate
+xcuserdata/
+DerivedData/
+
+# App bundle (built by build_app.sh)
+Storyteller.app/
+ScrivenerReader.app/
+
+# Python cache
+__pycache__/
+*.pyc
