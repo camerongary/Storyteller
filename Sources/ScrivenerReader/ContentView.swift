@@ -16,10 +16,6 @@ struct ContentView: View {
 
     private var isDark: Bool { colorScheme == .dark }
 
-    private var voices: [NSSpeechSynthesizer.VoiceName] {
-        SpeechManager.readingVoiceNames()
-    }
-
     /// Index in the chapter list that contains the current reading position.
     private var currentChapterIndex: Int? {
         guard let tp = textProcessor, !tp.chapters.isEmpty else { return nil }
@@ -111,6 +107,20 @@ struct ContentView: View {
                 if event.keyCode == 30, NSApp.keyWindow != nil { // ] = faster
                     speech.speechRate = min(1.5, speech.speechRate + 0.1)
                     return nil
+                }
+                return event
+            }
+            // Double-click anywhere in the window → zoom / minimise per system preference.
+            // (Equivalent to double-clicking a native title bar.)
+            NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
+                guard event.clickCount == 2 else { return event }
+                guard let window = event.window ?? NSApp.keyWindow else { return event }
+                let pref = UserDefaults.standard
+                    .string(forKey: "AppleActionOnDoubleClick") ?? "Maximize"
+                switch pref {
+                case "Minimize": window.miniaturize(nil)
+                case "None":     break
+                default:         window.zoom(nil)
                 }
                 return event
             }
@@ -236,19 +246,23 @@ struct ContentView: View {
 
             // Voice picker
             Menu {
-                ForEach(voices, id: \.rawValue) { voice in
-                    Button(action: {
-                        speech.selectedVoiceName = voice
-                        if speech.isSpeaking {
-                            let offset = speech.currentWordRange?.location ?? 0
-                            speech.play(from: offset)
-                        }
-                    }) {
-                        HStack {
-                            if speech.selectedVoiceName == voice {
-                                Image(systemName: "checkmark")
+                ForEach(SpeechManager.groupedVoiceNames(), id: \.language) { group in
+                    Section(group.language) {
+                        ForEach(group.voices, id: \.rawValue) { voice in
+                            Button(action: {
+                                speech.selectedVoiceName = voice
+                                if speech.isSpeaking {
+                                    let offset = speech.currentWordRange?.location ?? 0
+                                    speech.play(from: offset)
+                                }
+                            }) {
+                                HStack {
+                                    if speech.selectedVoiceName == voice {
+                                        Image(systemName: "checkmark")
+                                    }
+                                    Text(voiceDisplayName(voice))
+                                }
                             }
-                            Text(voiceDisplayName(voice))
                         }
                     }
                 }

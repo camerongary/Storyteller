@@ -242,57 +242,93 @@ class SpeechManager: NSObject, ObservableObject, NSSpeechSynthesizerDelegate {
 
     // MARK: - Voice helpers
 
-    /// Readable voices for the current locale.
-    /// Deduplicates multi-locale voices (keeps en-US), hides novelty voices,
-    /// sorts Premium → Enhanced → Standard.
+    private static let noveltyVoices: Set<String> = [
+        "Agnes","Albert","Bad News","Bahh","Bells","Boing","Bruce","Bubbles",
+        "Cellos","Fred","Good News","Jester","Junior","Kathy","Organ","Ralph",
+        "Superstar","Trinoids","Whisper","Wobble","Zarvox","Aman","Tara","Rishi"
+    ]
+
+    private static func voiceRank(_ id: String) -> Int {
+        if id.contains(".premium.")  || id.contains("premium")  { return 0 }
+        if id.contains(".enhanced.") || id.contains("enhanced") { return 1 }
+        return 2
+    }
+
+    /// English-only voices used as the fallback default in init().
+    /// Deduplicates multi-locale voices (keeps en-US), sorts Premium → Enhanced → Standard.
     static func readingVoiceNames() -> [NSSpeechSynthesizer.VoiceName] {
-        let novelty: Set<String> = [
-            "Agnes","Albert","Bad News","Bahh","Bells","Boing","Bruce","Bubbles",
-            "Cellos","Fred","Good News","Jester","Junior","Kathy","Organ","Ralph",
-            "Superstar","Trinoids","Whisper","Wobble","Zarvox","Aman","Tara","Rishi"
-        ]
-
-        // Quality rank from identifier string
-        func rank(_ id: String) -> Int {
-            if id.contains(".premium.") || id.contains("premium") { return 0 }
-            if id.contains(".enhanced.") || id.contains("enhanced") { return 1 }
-            return 2
-        }
-
-        var seen = Set<String>()   // deduplicate by base persona name
-
-        let voices: [NSSpeechSynthesizer.VoiceName] = NSSpeechSynthesizer.availableVoices
+        var seen = Set<String>()
+        return NSSpeechSynthesizer.availableVoices
             .compactMap { voice -> (NSSpeechSynthesizer.VoiceName, String, Int)? in
                 let attrs  = NSSpeechSynthesizer.attributes(forVoice: voice)
                 let locale = attrs[.localeIdentifier] as? String ?? ""
                 let name   = attrs[.name] as? String ?? ""
-                // Keep only English voices; skip novelty
                 guard locale.lowercased().hasPrefix("en"),
-                      !novelty.contains(name) else { return nil }
-                return (voice, name, rank(voice.rawValue))
+                      !noveltyVoices.contains(name) else { return nil }
+                return (voice, name, voiceRank(voice.rawValue))
             }
-            // Sort: best quality first, then name
             .sorted { a, b in a.2 == b.2 ? a.1 < b.1 : a.2 < b.2 }
-            // Deduplicate: for multi-locale voices keep first seen (en-US preferred by sort)
             .compactMap { item -> NSSpeechSynthesizer.VoiceName? in
-                // Strip locale suffix from display name for dedup key
                 let baseName = item.1
-                    .replacingOccurrences(of: " \\(English.*\\)$", with: "",
-                                          options: .regularExpression)
-                let key = "\(baseName)|\(item.2)"   // name + quality tier
+                    .replacingOccurrences(of: " \\(.*\\)$", with: "", options: .regularExpression)
+                let key = "\(baseName)|\(item.2)"
                 if seen.contains(key) { return nil }
                 seen.insert(key)
                 return item.0
             }
+    }
 
-        return voices
+    /// All installed voices grouped by language, English first.
+    /// Within each language: Premium → Enhanced → Standard, then alphabetical.
+    /// Novelty/joke voices are excluded; multi-locale duplicates are collapsed.
+    static func groupedVoiceNames() -> [(language: String, voices: [NSSpeechSynthesizer.VoiceName])] {
+        // Collect every non-novelty voice with its attributes
+        let all: [(voice: NSSpeechSynthesizer.VoiceName, name: String, lang: String, rank: Int)] =
+            NSSpeechSynthesizer.availableVoices.compactMap { voice in
+                let attrs  = NSSpeechSynthesizer.attributes(forVoice: voice)
+                let locale = attrs[.localeIdentifier] as? String ?? ""
+                let name   = attrs[.name] as? String ?? ""
+                guard !noveltyVoices.contains(name) else { return nil }
+                let lang = locale.components(separatedBy: "-").first ?? locale
+                return (voice, name, lang, voiceRank(voice.rawValue))
+            }
+            .sorted { a, b in
+                if a.lang != b.lang { return a.lang < b.lang }
+                return a.rank == b.rank ? a.name < b.name : a.rank < b.rank
+            }
+
+        // Group by language code; deduplicate within each group
+        var voicesByLang: [String: [NSSpeechSynthesizer.VoiceName]] = [:]
+        var seenPerLang:  [String: Set<String>] = [:]
+
+        for item in all {
+            let baseName = item.name
+                .replacingOccurrences(of: " \\(.*\\)$", with: "", options: .regularExpression)
+            let key = "\(baseName)|\(item.rank)"
+            if seenPerLang[item.lang, default: []].contains(key) { continue }
+            seenPerLang[item.lang, default: []].insert(key)
+            voicesByLang[item.lang, default: []].append(item.voice)
+        }
+
+        // Build result: English first, then alphabetical by display name
+        let langDisplayName: (String) -> String = { code in
+            Locale.current.localizedString(forLanguageCode: code) ?? code.uppercased()
+        }
+        return voicesByLang
+            .map { (language: langDisplayName($0.key), voices: $0.value) }
+            .sorted { a, b in
+                let aEn = a.language.lowercased() == "english"
+                let bEn = b.language.lowercased() == "english"
+                if aEn != bEn { return aEn }
+                return a.language < b.language
+            }
     }
 
     static func displayName(for voice: NSSpeechSynthesizer.VoiceName) -> String {
         let raw = NSSpeechSynthesizer.attributes(forVoice: voice)[.name] as? String
                ?? voice.rawValue.components(separatedBy: ".").last ?? voice.rawValue
-        // Strip " (English (US))" / " (English (UK))" locale suffixes
-        return raw.replacingOccurrences(of: " \\(English.*\\)$", with: "",
+        // Strip locale suffixes like " (English (US))", " (French (France))", etc.
+        return raw.replacingOccurrences(of: " \\([^)]+\\(.*?\\)\\)$", with: "",
                                         options: .regularExpression)
     }
 }
