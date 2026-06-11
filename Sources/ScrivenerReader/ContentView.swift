@@ -329,7 +329,7 @@ struct ContentView: View {
 
     private func openFilePicker() {
         let panel = NSOpenPanel()
-        var types: [UTType] = [.plainText]
+        var types: [UTType] = [.plainText, .pdf]
         if let epubType = UTType(filenameExtension: "epub") {
             types.append(epubType)
         } else {

@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import PDFKit
 
 // MARK: - Output types
 
@@ -17,7 +18,7 @@ enum LoadError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .unsupportedFormat: return "Unsupported file format. Please use .txt or .epub."
+        case .unsupportedFormat: return "Unsupported file format. Please use .txt, .epub, or .pdf."
         case .readFailed(let msg): return "Could not read file: \(msg)"
         case .parseFailed(let msg): return "Could not parse file: \(msg)"
         }
@@ -32,6 +33,7 @@ struct DocumentLoader {
         switch url.pathExtension.lowercased() {
         case "txt":  return try loadTxt(url: url)
         case "epub": return try await loadEpub(url: url)
+        case "pdf":  return try loadPDF(url: url)
         default:     throw LoadError.unsupportedFormat
         }
     }
@@ -68,6 +70,76 @@ struct DocumentLoader {
             if !title.isEmpty { chapters.append((title, m.range.location)) }
         }
         return chapters
+    }
+
+    // =========================================================================
+    // MARK: - PDF
+    // =========================================================================
+
+    private static func loadPDF(url: URL) throws -> LoadedDocument {
+        guard let pdf = PDFDocument(url: url) else {
+            throw LoadError.readFailed("Could not open PDF.")
+        }
+
+        // Extract text page-by-page, recording each page's char offset.
+        var pageTexts: [(pageIndex: Int, text: String)] = []
+        for i in 0..<pdf.pageCount {
+            guard let page = pdf.page(at: i),
+                  let raw  = page.string else { continue }
+            let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty { pageTexts.append((i, text)) }
+        }
+        guard !pageTexts.isEmpty else {
+            throw LoadError.parseFailed("No readable text found in PDF. The file may be scanned or image-only.")
+        }
+
+        // Build page-index → char-offset map (pages separated by "\n\n")
+        var pageToOffset: [Int: Int] = [:]
+        var running = 0
+        for (idx, entry) in pageTexts.enumerated() {
+            pageToOffset[entry.pageIndex] = running
+            running += entry.text.count
+            if idx + 1 < pageTexts.count { running += 2 }
+        }
+
+        let fullText = pageTexts.map(\.text).joined(separator: "\n\n")
+
+        // Use the PDF's built-in outline (bookmarks) as chapters when available.
+        var chapters: [(title: String, charOffset: Int)] = []
+        if let outline = pdf.outlineRoot, outline.numberOfChildren > 0 {
+            chapters = extractPDFOutline(outline, pdf: pdf, pageToOffset: pageToOffset)
+        }
+
+        return LoadedDocument(text: fullText, chapters: chapters)
+    }
+
+    /// Recursively walk the PDFOutline tree, mapping each entry to a char offset.
+    private static func extractPDFOutline(
+        _ node: PDFOutline,
+        pdf: PDFDocument,
+        pageToOffset: [Int: Int]
+    ) -> [(title: String, charOffset: Int)] {
+        var result: [(title: String, charOffset: Int)] = []
+        var seen   = Set<Int>()
+
+        func visit(_ n: PDFOutline) {
+            for i in 0..<n.numberOfChildren {
+                guard let child = n.child(at: i) else { continue }
+                if let label  = child.label?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !label.isEmpty,
+                   let dest   = child.destination,
+                   let page   = dest.page,
+                   let offset = pageToOffset[pdf.index(for: page)],
+                   !seen.contains(offset) {
+                    seen.insert(offset)
+                    result.append((title: label, charOffset: offset))
+                }
+                visit(child)
+            }
+        }
+
+        visit(node)
+        return result.sorted { $0.charOffset < $1.charOffset }
     }
 
     // =========================================================================

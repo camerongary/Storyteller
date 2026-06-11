@@ -16,3 +16,6 @@ ScrivenerReader.app/
 # Python cache
 __pycache__/
 *.pyc
+
+# Release artifacts (attached to GitHub Releases, not committed)
+*.dmg
