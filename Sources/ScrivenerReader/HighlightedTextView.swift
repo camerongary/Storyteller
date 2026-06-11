@@ -109,6 +109,11 @@ struct HighlightedTextView: NSViewRepresentable {
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
 
+        // Allow the layout manager to lay out only the visible range rather than
+        // all text up to the target position. Without this, jumping to a position
+        // deep in a large document forces O(n) layout of all preceding text.
+        textView.layoutManager?.allowsNonContiguousLayout = true
+
         textView.onCharacterTapped = { [weak textView] charIdx in
             guard let _ = textView else { return }
             onWordTapped(charIdx)
@@ -358,6 +363,9 @@ struct HighlightedTextView: NSViewRepresentable {
     private func scrollToRange(_ range: NSRange, in textView: NSTextView, scrollView: NSScrollView) {
         guard let layoutManager = textView.layoutManager,
               let textContainer = textView.textContainer else { return }
+        // With allowsNonContiguousLayout = true, ensureLayout only processes this
+        // fragment — not all preceding text — so the call is O(local) not O(document).
+        layoutManager.ensureLayout(forCharacterRange: range)
         let glyphRange = layoutManager.glyphRange(forCharacterRange: range,
                                                    actualCharacterRange: nil)
         var rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)

@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd /Users/cameron/ScrivenerReader && git add -A && git commit -m 'auto: save changes' && git push 2>/dev/null || true"
+            "command": "bash /Users/cameron/ScrivenerReader/scripts/bump_and_push.sh 2>/dev/null || true"
           }
         ]
       }
