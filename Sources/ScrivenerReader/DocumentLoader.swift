@@ -18,7 +18,7 @@ enum LoadError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .unsupportedFormat: return "Unsupported file format. Please use .txt, .epub, or .pdf."
+        case .unsupportedFormat: return "Unsupported file format. Please use .txt, .rtf, .epub, or .pdf."
         case .readFailed(let msg): return "Could not read file: \(msg)"
         case .parseFailed(let msg): return "Could not parse file: \(msg)"
         }
@@ -32,6 +32,7 @@ struct DocumentLoader {
     static func load(url: URL) async throws -> LoadedDocument {
         switch url.pathExtension.lowercased() {
         case "txt":  return try loadTxt(url: url)
+        case "rtf", "rtfd": return try loadRTF(url: url)
         case "epub": return try await loadEpub(url: url)
         case "pdf":  return try loadPDF(url: url)
         default:     throw LoadError.unsupportedFormat
@@ -70,6 +71,27 @@ struct DocumentLoader {
             if !title.isEmpty { chapters.append((title, m.range.location)) }
         }
         return chapters
+    }
+
+    // =========================================================================
+    // MARK: - RTF / RTFD
+    // =========================================================================
+
+    private static func loadRTF(url: URL) throws -> LoadedDocument {
+        guard let data = try? Data(contentsOf: url) else {
+            throw LoadError.readFailed("Could not read file.")
+        }
+        let docType: NSAttributedString.DocumentType =
+            url.pathExtension.lowercased() == "rtfd" ? .rtfd : .rtf
+        let opts: [NSAttributedString.DocumentReadingOptionKey: Any] = [
+            .documentType: docType
+        ]
+        guard let attrStr = try? NSAttributedString(data: data, options: opts,
+                                                     documentAttributes: nil) else {
+            throw LoadError.parseFailed("Could not parse RTF file.")
+        }
+        let text = attrStr.string
+        return LoadedDocument(text: text, chapters: detectTxtChapters(in: text))
     }
 
     // =========================================================================

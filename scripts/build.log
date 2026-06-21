@@ -1,0 +1,23 @@
+→ Building release binary (with embedded Info.plist)…
+Building for production...
+[1 / 3]
+[2 / 3] Storyteller-product
+[3 / 3] Storyteller-product
+Build complete! (0.98 sec)
+→ Creating .app bundle…
+→ Icon copied.
+→ Removing quarantine flags…
+→ Code-signing ad-hoc…
+/Users/cameron/ScrivenerReader/Storyteller.app: replacing existing signature
+→ Installing to /Applications…
+→ Registering with Launch Services…
+
+✓ Done! Storyteller.app is in /Applications
+
+  ⚠️  One manual step required (Gatekeeper):
+  Open Finder → go to /Applications (⇧⌘A)
+  Right-click Storyteller.app → choose 'Open'
+  Click 'Open' in the security dialog
+  This only needs to be done once.
+
+  After that, quit and relaunch Scrivener.
