@@ -19,6 +19,13 @@ class SpeechManager: NSObject, ObservableObject, NSSpeechSynthesizerDelegate {
     @Published var currentOffset: Int = 0
     private var isJumping = false
 
+    /// Absolute char offset where the current utterance ends. The synthesizer
+    /// preprocesses whatever it's handed, so speaking the whole remaining
+    /// document caused multi-second stalls on every jump. Instead we speak
+    /// ~20k-char chunks (cut at sentence boundaries) and chain them.
+    private var chunkEnd: Int = 0
+    private let maxChunkLength = 20_000
+
     override init() {
         super.init()
         synthesizer.delegate = self
@@ -45,7 +52,11 @@ class SpeechManager: NSObject, ObservableObject, NSSpeechSynthesizerDelegate {
         guard let tp = textProcessor else { return }
         stopInternal()
         currentOffset = charOffset
-        let slice = (tp.fullText as NSString).substring(from: charOffset)
+        let ns = tp.fullText as NSString
+        guard charOffset < ns.length else { return }
+        chunkEnd = chunkBoundary(after: charOffset, in: tp)
+        let slice = ns.substring(with: NSRange(location: charOffset,
+                                               length: chunkEnd - charOffset))
         guard !slice.isEmpty else { return }
 
         applyVoiceAndRate()
@@ -53,6 +64,18 @@ class SpeechManager: NSObject, ObservableObject, NSSpeechSynthesizerDelegate {
         isSpeaking = true
         isPaused = false
         updateNowPlayingState()
+    }
+
+    /// End of the chunk starting at `offset`: at most maxChunkLength chars,
+    /// extended to the end of the sentence it lands in.
+    private func chunkBoundary(after offset: Int, in tp: TextProcessor) -> Int {
+        let length = (tp.fullText as NSString).length
+        let target = min(offset + maxChunkLength, length)
+        if target >= length { return length }
+        if let idx = tp.sentenceIndex(for: target) {
+            return min(NSMaxRange(tp.sentences[idx].range), length)
+        }
+        return target
     }
 
     func pauseResume() {
@@ -170,6 +193,14 @@ class SpeechManager: NSObject, ObservableObject, NSSpeechSynthesizerDelegate {
         DispatchQueue.main.async { [weak self] in
             // Inner guard: re-check at execution time in case the reset was deferred.
             guard let self, !self.isJumping else { return }
+            // Chunk finished but the document hasn't — continue seamlessly.
+            let textLength = (self.textProcessor?.fullText as NSString?)?.length ?? 0
+            if finishedSpeaking, self.chunkEnd < textLength {
+                self.isJumping = true   // shield flags from the restart's stop callbacks
+                self.play(from: self.chunkEnd)
+                DispatchQueue.main.async { [weak self] in self?.isJumping = false }
+                return
+            }
             self.isSpeaking = false
             self.isPaused = false
             self.currentWordRange = nil

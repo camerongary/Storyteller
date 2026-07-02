@@ -578,14 +578,20 @@ struct ContentView: View {
         SpeechManager.displayName(for: voice)
     }
 
-    /// "Chapter Three — 2,341 words, 13 min" for the status bar.
+    /// "Chapter Three — word 512 of 2,341 · 13 min · 10 min left"
     private func currentChapterInfo() -> String? {
         guard let tp = textProcessor,
               let ci = currentChapterIndex,
               ci < tp.chapterWordCounts.count else { return nil }
-        let words = tp.chapterWordCounts[ci]
+        let total = tp.chapterWordCounts[ci]
+        guard total > 0 else { return nil }
+        let pos = speech.currentWordRange?.location ?? speech.currentOffset
+        let startIdx = tp.firstTokenIndex(atOrAfter: tp.chapters[ci].charOffset)
+        let cur = min(max(tp.firstTokenIndex(atOrAfter: pos) - startIdx + 1, 1), total)
         let title = tp.chapters[ci].title
-        return "\(title) — \(words.formatted()) words, \(readingTimeString(words: words))"
+        return "\(title) — word \(cur.formatted()) of \(total.formatted())"
+             + " · \(readingTimeString(words: total))"
+             + " · \(readingTimeString(words: total - cur)) left"
     }
 
     /// Estimated listening time at the current speech rate (~180 wpm at 1.0×).

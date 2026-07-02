@@ -97,7 +97,7 @@ class TextProcessor {
     }
 
     /// Index of the first word token starting at or after `pos` (binary search).
-    private func firstTokenIndex(atOrAfter pos: Int) -> Int {
+    func firstTokenIndex(atOrAfter pos: Int) -> Int {
         var lo = 0, hi = wordTokens.count
         while lo < hi {
             let mid = (lo + hi) / 2
