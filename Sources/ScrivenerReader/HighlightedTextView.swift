@@ -43,6 +43,9 @@ enum Theme {
             : NSColor(srgbRed: 0.72, green: 0.30, blue: 0.08, alpha: 1)
     }
 
+    // Notes (comments/revisions) — coral, matches the app icon's speech bubble
+    static let noteAccent = NSColor(srgbRed: 0.89, green: 0.43, blue: 0.36, alpha: 1)
+
     // Legacy accessors used in ContentView status bar (dark mode defaults)
     static let repeatedWord = repeatedActive(true)
 }
@@ -52,16 +55,20 @@ enum Theme {
 final class ClickableTextView: NSTextView {
     var onCharacterTapped: ((Int) -> Void)?
     var onSpacebar: (() -> Void)?
+    /// (selected range, isRevision) — called from the context menu's note items
+    var onAddNote: ((NSRange, Bool) -> Void)?
 
     override var acceptsFirstResponder: Bool { true }
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         let charIdx = characterIndexForInsertion(at: point)
-        if charIdx < string.count {
+        // super runs the full selection tracking loop (returns after mouse-up),
+        // so a plain click jumps playback while a drag just selects text.
+        super.mouseDown(with: event)
+        if selectedRange().length == 0, charIdx < string.count {
             onCharacterTapped?(charIdx)
         }
-        super.mouseDown(with: event)  // enables drag-to-select for Copy/Look Up/Services
     }
 
     override func keyDown(with event: NSEvent) {
@@ -72,8 +79,26 @@ final class ClickableTextView: NSTextView {
         }
     }
 
-    // Standard context menu: Copy, Look Up, Translate, Search with Google, Services
-    override func menu(for event: NSEvent) -> NSMenu? { super.menu(for: event) }
+    // Standard context menu (Copy, Look Up, Translate, Services) with
+    // note-taking items prepended when text is selected.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = super.menu(for: event) ?? NSMenu()
+        if selectedRange().length > 0 {
+            let comment = NSMenuItem(title: "Add Comment\u{2026}",
+                                     action: #selector(addCommentAction(_:)), keyEquivalent: "")
+            comment.target = self
+            let revision = NSMenuItem(title: "Suggest Revision\u{2026}",
+                                      action: #selector(addRevisionAction(_:)), keyEquivalent: "")
+            revision.target = self
+            menu.insertItem(comment, at: 0)
+            menu.insertItem(revision, at: 1)
+            menu.insertItem(NSMenuItem.separator(), at: 2)
+        }
+        return menu
+    }
+
+    @objc private func addCommentAction(_ sender: Any?)  { onAddNote?(selectedRange(), false) }
+    @objc private func addRevisionAction(_ sender: Any?) { onAddNote?(selectedRange(), true) }
 }
 
 // MARK: - NSViewRepresentable
@@ -84,6 +109,9 @@ struct HighlightedTextView: NSViewRepresentable {
     var onWordTapped: (Int) -> Void   // char position in fullText
     var showRepeatHighlight: Bool
     var isDark: Bool
+    var noteRanges: [NSRange] = []
+    var onAddNote: ((NSRange, Bool) -> Void)? = nil
+    var proxy: TextViewProxy? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -125,6 +153,7 @@ struct HighlightedTextView: NSViewRepresentable {
         scrollView.documentView = textView
         context.coordinator.textView = textView
         context.coordinator.scrollView = scrollView
+        proxy?.textView = textView
 
         return scrollView
     }
@@ -135,20 +164,24 @@ struct HighlightedTextView: NSViewRepresentable {
 
         // Wire spacebar action to current speech manager
         coord.speechRef = { [weak speech = speech] in speech?.pauseResume() }
+        textView.onAddNote = onAddNote
 
         // Check if theme changed (dark/light mode switch)
         let themeChanged = coord.lastIsDark != isDark
 
-        // Rebuild attributed string if text changed OR theme changed
+        // Rebuild attributed string if text, theme, or annotations changed
         let textChanged = coord.loadedText !== textProcessor
         let repeatChanged = coord.lastShowRepeat != showRepeatHighlight
+        let notesSig = noteRanges.map { "\($0.location):\($0.length)" }.joined(separator: ",")
+        let notesChanged = coord.lastNotesSig != notesSig
 
-        if textChanged || themeChanged || repeatChanged {
+        if textChanged || themeChanged || repeatChanged || notesChanged {
             coord.loadedText = textProcessor
             coord.lastWordRange = nil
             coord.lastSentenceIdx = nil
             coord.lastIsDark = isDark
             coord.lastShowRepeat = showRepeatHighlight
+            coord.lastNotesSig = notesSig
 
             // Update backgrounds on theme change
             textView.backgroundColor = Theme.background(isDark)
@@ -253,15 +286,23 @@ struct HighlightedTextView: NSViewRepresentable {
     private func buildBaseAttributedString(tp: TextProcessor, isDark: Bool, showRepeat: Bool) -> NSAttributedString {
         let result = NSMutableAttributedString(string: tp.fullText,
                                                attributes: dimTextAttrs(isDark: isDark))
+        let textLength = (tp.fullText as NSString).length
         if showRepeat {
             for loc in tp.repeatedWordLocations {
                 if let token = tp.wordToken(containing: loc) {
                     let r = token.range
-                    if NSMaxRange(r) <= (tp.fullText as NSString).length {
+                    if NSMaxRange(r) <= textLength {
                         result.addAttributes(dimRepeatAttrs(isDark: isDark), range: r)
                     }
                 }
             }
+        }
+        // Dotted underline beneath annotated passages. Lives in the base string,
+        // so sentence/word highlight passes preserve it automatically.
+        let noteStyle = NSUnderlineStyle.single.rawValue | NSUnderlineStyle.patternDot.rawValue
+        for r in noteRanges where r.length > 0 && NSMaxRange(r) <= textLength {
+            result.addAttributes([.underlineStyle: noteStyle,
+                                  .underlineColor: Theme.noteAccent], range: r)
         }
         return result
     }
@@ -387,5 +428,6 @@ struct HighlightedTextView: NSViewRepresentable {
         var baseStorage: NSAttributedString?
         var lastIsDark: Bool?
         var lastShowRepeat: Bool?
+        var lastNotesSig: String?
     }
 }

@@ -50,6 +50,16 @@ struct HelpView: View {
                         }
                     }
 
+                    // Notes
+                    helpSection(title: "Notes") {
+                        VStack(alignment: .leading, spacing: 6) {
+                            bulletText("Select text and right-click to add a comment or suggest a revision.")
+                            bulletText("While listening, press \u{21E7}\u{2318}C (comment) or \u{21E7}\u{2318}R (revision) to annotate the current sentence \u{2014} playback pauses while you write.")
+                            bulletText("Annotated passages get a dotted underline. Toggle the notes panel with \u{21E7}\u{2318}N; click a note to jump to its place in the text.")
+                            bulletText("Notes are saved per document and restored when you reopen it. Use Notes \u{203A} Export Notes\u{2026} to save them as Markdown.")
+                        }
+                    }
+
                     // Voices
                     helpSection(title: "Voices") {
                         bodyText(

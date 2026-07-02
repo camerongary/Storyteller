@@ -1,10 +1,11 @@
 # Storyteller
 
-A macOS text-to-speech reader for writers. Open a `.txt`, `.epub`, or `.pdf` file and have it read aloud with word-by-word and sentence highlighting. Designed to work alongside [Scrivener](https://www.literatureandlatte.com/scrivener/overview) as an external editor, but works with any plain-text, epub, or PDF file.
+A macOS text-to-speech reader for writers. Open a `.txt`, `.rtf`, `.epub`, or `.pdf` file and have it read aloud with word-by-word and sentence highlighting. Designed to work alongside [Scrivener](https://www.literatureandlatte.com/scrivener/overview) as an external editor, but works with any supported file.
 
 ## Features
 
 - **Word & sentence highlighting** — the current word is highlighted as it's spoken; the surrounding sentence is softly lit
+- **Notes & revisions** — select text (or just listen) and add comments or suggested revisions; annotated passages get a dotted underline, notes persist per document, and everything exports to Markdown for your revision pass
 - **Chapter navigation** — automatically detects chapters in `.txt` files, parses the Table of Contents from `.epub` files, and uses the bookmarks outline from `.pdf` files; skip between chapters with toolbar buttons or the ⏮/⏭ hardware media keys
 - **Table of Contents sidebar** — click any chapter to jump to it instantly
 - **Click to read from anywhere** — click any word in the text to start reading from that point

@@ -82,6 +82,30 @@ struct ScrivenerReaderApp: App {
                     NotificationCenter.default.post(name: .toggleTOCRequested, object: nil)
                 }
                 .keyboardShortcut("\\", modifiers: .command)
+
+                Button("Toggle Notes") {
+                    NotificationCenter.default.post(name: .toggleNotesRequested, object: nil)
+                }
+                .keyboardShortcut("n", modifiers: [.command, .shift])
+            }
+
+            // ── Notes menu ────────────────────────────────────────────────────
+            CommandMenu("Notes") {
+                Button("Add Comment\u{2026}") {
+                    NotificationCenter.default.post(name: .addCommentRequested, object: nil)
+                }
+                .keyboardShortcut("c", modifiers: [.command, .shift])
+
+                Button("Suggest Revision\u{2026}") {
+                    NotificationCenter.default.post(name: .addRevisionRequested, object: nil)
+                }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+
+                Divider()
+
+                Button("Export Notes\u{2026}") {
+                    NotificationCenter.default.post(name: .exportNotesRequested, object: nil)
+                }
             }
 
             // ── Help menu ─────────────────────────────────────────────────────
@@ -127,4 +151,8 @@ extension Notification.Name {
     static let speedUpRequested   = Notification.Name("speedUpRequested")
     static let speedDownRequested = Notification.Name("speedDownRequested")
     static let toggleTOCRequested = Notification.Name("toggleTOCRequested")
+    static let toggleNotesRequested = Notification.Name("toggleNotesRequested")
+    static let addCommentRequested  = Notification.Name("addCommentRequested")
+    static let addRevisionRequested = Notification.Name("addRevisionRequested")
+    static let exportNotesRequested = Notification.Name("exportNotesRequested")
 }

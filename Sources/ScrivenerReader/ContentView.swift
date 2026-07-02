@@ -1,9 +1,11 @@
 import SwiftUI
 import AppKit
+import Combine
 import UniformTypeIdentifiers
 
 struct ContentView: View {
     @StateObject private var speech = SpeechManager()
+    @StateObject private var notesManager = NotesManager()
     @State private var textProcessor: TextProcessor? = nil
     @State private var fileName: String = ""
     @State private var errorMessage: String? = nil
@@ -11,6 +13,9 @@ struct ContentView: View {
     @State private var showVoicePicker = false
     @State private var showRepeatHighlight = false
     @State private var showTOC = false
+    @State private var showNotes = false
+    @State private var noteDraft: NoteDraft? = nil
+    @State private var textProxy = TextViewProxy()
     @Environment(\.openWindow) private var openWindow
     @Environment(\.colorScheme) var colorScheme
 
@@ -66,9 +71,33 @@ struct ContentView: View {
                             speech.jumpTo(charPosition: charPos, startPlaying: true)
                         },
                         showRepeatHighlight: showRepeatHighlight,
-                        isDark: isDark
+                        isDark: isDark,
+                        noteRanges: notesManager.notes.map(\.range),
+                        onAddNote: { range, isRevision in
+                            beginNote(kind: isRevision ? .revision : .comment, range: range)
+                        },
+                        proxy: textProxy
                     )
                     .background(Color(nsColor: Theme.background(isDark)))
+
+                    // ── Notes sidebar ───────────────────────────────────────
+                    if showNotes, textProcessor != nil {
+                        Divider().background(isDark ? Color(white: 0.20) : Color(white: 0.70))
+                        NotesPanel(
+                            notes:    notesManager.notes,
+                            isDark:   isDark,
+                            onSelect: { note in
+                                speech.jumpTo(charPosition: note.location)
+                                textProxy.scroll(to: note.range)
+                            },
+                            onEdit:   { note in
+                                noteDraft = NoteDraft(existing: note, kind: note.kind,
+                                                      range: note.range, quote: note.quote,
+                                                      content: note.content)
+                            },
+                            onDelete: { note in notesManager.delete(note) }
+                        )
+                    }
                 }
 
                 Divider().background(isDark ? Color(white: 0.20) : Color(white: 0.70))
@@ -82,34 +111,16 @@ struct ContentView: View {
                     )
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .showHelp)) { _ in
-            openWindow(id: "help")
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .openFileRequested)) { _ in
-            openFilePicker()
+        .onReceive(Self.commandPublisher) { name in
+            handleCommand(name)
         }
         .onReceive(NotificationCenter.default.publisher(for: .openFileURL)) { note in
             if let url = note.object as? URL { loadFile(url: url) }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .playPauseRequested)) { _ in
-            speech.pauseResume()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .nextChapterRequested)) { _ in
-            speech.nextChapter()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .prevChapterRequested)) { _ in
-            speech.prevChapter()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .speedUpRequested)) { _ in
-            speech.speechRate = min(1.5, speech.speechRate + 0.1)
-            if speech.isSpeaking { speech.play(from: speech.currentWordRange?.location ?? speech.currentOffset) }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .speedDownRequested)) { _ in
-            speech.speechRate = max(0.5, speech.speechRate - 0.1)
-            if speech.isSpeaking { speech.play(from: speech.currentWordRange?.location ?? speech.currentOffset) }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .toggleTOCRequested)) { _ in
-            showTOC.toggle()
+        .sheet(item: $noteDraft) { draft in
+            NoteEditorSheet(draft: draft) { finished in
+                saveNoteDraft(finished)
+            }
         }
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             guard let provider = providers.first else { return false }
@@ -164,6 +175,21 @@ struct ContentView: View {
             .disabled((textProcessor?.chapters.isEmpty) ?? true)
             .help("Table of Contents  ⌘\\")
             .accessibilityLabel("Table of Contents")
+
+            // Notes panel toggle
+            Button(action: { showNotes.toggle() }) {
+                Image(systemName: "note.text")
+                    .font(.system(size: 13))
+                    .foregroundColor(
+                        showNotes
+                            ? Color(nsColor: Theme.noteAccent)
+                            : (isDark ? Color(white: 0.55) : Color(white: 0.40))
+                    )
+            }
+            .buttonStyle(.plain)
+            .disabled(textProcessor == nil)
+            .help("Notes  ⇧⌘N")
+            .accessibilityLabel("Notes")
 
             Divider().frame(height: 22).background(isDark ? Color(white: 0.30) : Color(white: 0.60))
 
@@ -336,12 +362,62 @@ struct ContentView: View {
         }
     }
 
+    // MARK: - Menu command routing
+
+    /// All payload-free menu/toolbar commands merged into one publisher —
+    /// a single onReceive keeps the body light for the type-checker.
+    private static let commandPublisher: AnyPublisher<Notification.Name, Never> = {
+        let names: [Notification.Name] = [
+            .showHelp, .openFileRequested,
+            .playPauseRequested, .nextChapterRequested, .prevChapterRequested,
+            .speedUpRequested, .speedDownRequested,
+            .toggleTOCRequested, .toggleNotesRequested,
+            .addCommentRequested, .addRevisionRequested, .exportNotesRequested
+        ]
+        return Publishers.MergeMany(
+            names.map { name in
+                NotificationCenter.default.publisher(for: name).map { _ in name }
+            }
+        )
+        .receive(on: DispatchQueue.main)
+        .eraseToAnyPublisher()
+    }()
+
+    private func handleCommand(_ name: Notification.Name) {
+        switch name {
+        case .showHelp:             openWindow(id: "help")
+        case .openFileRequested:    openFilePicker()
+        case .playPauseRequested:   speech.pauseResume()
+        case .nextChapterRequested: speech.nextChapter()
+        case .prevChapterRequested: speech.prevChapter()
+        case .speedUpRequested:     changeSpeed(by: +0.1)
+        case .speedDownRequested:   changeSpeed(by: -0.1)
+        case .toggleTOCRequested:   showTOC.toggle()
+        case .toggleNotesRequested: showNotes.toggle()
+        case .addCommentRequested:  beginNote(kind: .comment, range: nil)
+        case .addRevisionRequested: beginNote(kind: .revision, range: nil)
+        case .exportNotesRequested: exportNotes()
+        default: break
+        }
+    }
+
+    private func changeSpeed(by delta: Float) {
+        speech.speechRate = min(1.5, max(0.5, speech.speechRate + delta))
+        if speech.isSpeaking {
+            speech.play(from: speech.currentWordRange?.location ?? speech.currentOffset)
+        }
+    }
+
     // MARK: - Helpers
 
     private func setupEventMonitors() {
         // Spacebar: play/pause. Can't be a menu shortcut, so we intercept here.
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [self] event in
             guard NSApp.keyWindow != nil else { return event }
+            // Don't hijack Space while the user is typing (e.g. the note editor).
+            if let editor = NSApp.keyWindow?.firstResponder as? NSTextView, editor.isEditable {
+                return event
+            }
             if event.keyCode == 49 {
                 speech.pauseResume()
                 return nil
@@ -360,6 +436,59 @@ struct ContentView: View {
             default:         win.zoom(nil)
             }
             return event
+        }
+    }
+
+    // MARK: - Notes
+
+    /// Open the note editor. Anchor priority: explicit range (context menu) →
+    /// current selection → sentence being read → whole document.
+    private func beginNote(kind: NoteKind, range: NSRange?) {
+        guard let tp = textProcessor else { return }
+        let ns = tp.fullText as NSString
+        var anchor = range ?? textProxy.selectedRange() ?? currentSentenceRange()
+                  ?? NSRange(location: 0, length: 0)
+        if NSMaxRange(anchor) > ns.length { anchor = NSRange(location: 0, length: 0) }
+        let quote = anchor.length > 0 ? ns.substring(with: anchor) : ""
+        // Pause while writing — resume manually when done.
+        if speech.isSpeaking && !speech.isPaused { speech.pauseResume() }
+        showNotes = true
+        noteDraft = NoteDraft(existing: nil, kind: kind, range: anchor, quote: quote)
+    }
+
+    private func currentSentenceRange() -> NSRange? {
+        guard let tp = textProcessor else { return nil }
+        let pos = speech.currentWordRange?.location ?? speech.currentOffset
+        guard let idx = tp.sentenceIndex(for: pos) else { return nil }
+        return tp.sentences[idx].range
+    }
+
+    private func saveNoteDraft(_ draft: NoteDraft) {
+        if var existing = draft.existing {
+            existing.kind = draft.kind
+            existing.content = draft.content
+            notesManager.update(existing)
+        } else {
+            notesManager.add(kind: draft.kind, range: draft.range,
+                             quote: draft.quote, content: draft.content)
+        }
+    }
+
+    private func exportNotes() {
+        guard !notesManager.notes.isEmpty else {
+            errorMessage = "There are no notes to export."
+            return
+        }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
+        panel.nameFieldStringValue =
+            (fileName as NSString).deletingPathExtension + " Notes.md"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let md = notesManager.exportMarkdown(documentName: fileName)
+        do {
+            try md.write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            errorMessage = "Could not export notes: \(error.localizedDescription)"
         }
     }
 
@@ -400,8 +529,11 @@ struct ContentView: View {
                     let tp = TextProcessor(text: doc.text, chapters: doc.chapters)
                     self.textProcessor = tp
                     speech.textProcessor = tp
-                    // Auto-show TOC if the document has chapters
+                    notesManager.load(for: url, text: doc.text)
+                    // Auto-show TOC if the document has chapters,
+                    // and the notes panel if the document has notes.
                     if !tp.chapters.isEmpty { showTOC = true }
+                    showNotes = !notesManager.notes.isEmpty
                     isLoading = false
                 }
             } catch {
