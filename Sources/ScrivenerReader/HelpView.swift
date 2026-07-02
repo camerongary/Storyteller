@@ -18,16 +18,17 @@ struct HelpView: View {
                     // Opening Files
                     helpSection(title: "Opening Files") {
                         bodyText(
-                            "Drag a .txt or .epub file onto the app, use File \u{203A} Open (\u{2318}O), or compile from Scrivener and choose Storyteller as the open-in app."
+                            "Drag a file onto the app window or use File \u{203A} Open (\u{2318}O). Supported formats: .txt, .epub, .pdf, and .rtf/.rtfd."
                         )
                     }
 
                     // Playback
                     helpSection(title: "Playback") {
                         shortcutTable(rows: [
-                            ("Play / Pause", "Space bar or \u{25B6} button"),
-                            ("Previous sentence", "\u{2318}\u{2190}"),
-                            ("Next sentence", "\u{2318}\u{2192}"),
+                            ("Play / Pause", "Space  or  \u{25B6} button"),
+                            ("Previous chapter / sentence", "\u{2318}\u{2190}"),
+                            ("Next chapter / sentence", "\u{2318}\u{2192}"),
+                            ("Toggle Table of Contents", "\u{2318}\\"),
                             ("Jump to word", "Click any word"),
                         ])
                     }
@@ -35,8 +36,8 @@ struct HelpView: View {
                     // Speed
                     helpSection(title: "Speed") {
                         shortcutTable(rows: [
-                            ("Slower", "\u{1F422} button or [ key"),
-                            ("Faster", "\u{1F407} button or ] key"),
+                            ("Slower", "\u{1F422} button or  [  key"),
+                            ("Faster", "\u{1F407} button or  ]  key"),
                         ])
                     }
 

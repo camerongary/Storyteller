@@ -15,7 +15,7 @@ struct ScrivenerReaderApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .commands {
-            // Replace default New with Open
+            // ── File menu ─────────────────────────────────────────────────────
             CommandGroup(replacing: .newItem) {}
             CommandGroup(after: .newItem) {
                 Button("Open File…") {
@@ -23,7 +23,6 @@ struct ScrivenerReaderApp: App {
                 }
                 .keyboardShortcut("o", modifiers: .command)
 
-                // Open Recent submenu
                 Menu("Open Recent") {
                     if recents.urls.isEmpty {
                         Text("No Recent Files")
@@ -34,14 +33,58 @@ struct ScrivenerReaderApp: App {
                             }
                         }
                         Divider()
-                        Button("Clear Menu") {
-                            recents.clear()
-                        }
+                        Button("Clear Menu") { recents.clear() }
                     }
                 }
+
+                Divider()
+
+                Button("Close") {
+                    NSApp.keyWindow?.performClose(nil)
+                }
+                .keyboardShortcut("w", modifiers: .command)
             }
 
-            // Help menu item
+            // ── Playback menu ─────────────────────────────────────────────────
+            CommandMenu("Playback") {
+                Button("Play / Pause") {
+                    NotificationCenter.default.post(name: .playPauseRequested, object: nil)
+                }
+
+                Divider()
+
+                Button("Previous Chapter") {
+                    NotificationCenter.default.post(name: .prevChapterRequested, object: nil)
+                }
+                .keyboardShortcut(.leftArrow, modifiers: .command)
+
+                Button("Next Chapter") {
+                    NotificationCenter.default.post(name: .nextChapterRequested, object: nil)
+                }
+                .keyboardShortcut(.rightArrow, modifiers: .command)
+
+                Divider()
+
+                Button("Slower") {
+                    NotificationCenter.default.post(name: .speedDownRequested, object: nil)
+                }
+                .keyboardShortcut("[", modifiers: [])
+
+                Button("Faster") {
+                    NotificationCenter.default.post(name: .speedUpRequested, object: nil)
+                }
+                .keyboardShortcut("]", modifiers: [])
+            }
+
+            // ── View menu ─────────────────────────────────────────────────────
+            CommandMenu("View") {
+                Button("Toggle Table of Contents") {
+                    NotificationCenter.default.post(name: .toggleTOCRequested, object: nil)
+                }
+                .keyboardShortcut("\\", modifiers: .command)
+            }
+
+            // ── Help menu ─────────────────────────────────────────────────────
             CommandGroup(replacing: .help) {
                 Button("Storyteller Help") {
                     NotificationCenter.default.post(name: .showHelp, object: nil)
@@ -50,7 +93,6 @@ struct ScrivenerReaderApp: App {
             }
         }
 
-        // Dedicated Help window (separate from main window)
         Window("Storyteller Help", id: "help") {
             HelpView()
         }
@@ -76,7 +118,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 // MARK: - Notification names
 
 extension Notification.Name {
-    static let openFileRequested = Notification.Name("openFileRequested")
-    static let openFileURL       = Notification.Name("openFileURL")
-    static let showHelp          = Notification.Name("showHelp")
+    static let openFileRequested  = Notification.Name("openFileRequested")
+    static let openFileURL        = Notification.Name("openFileURL")
+    static let showHelp           = Notification.Name("showHelp")
+    static let playPauseRequested = Notification.Name("playPauseRequested")
+    static let nextChapterRequested = Notification.Name("nextChapterRequested")
+    static let prevChapterRequested = Notification.Name("prevChapterRequested")
+    static let speedUpRequested   = Notification.Name("speedUpRequested")
+    static let speedDownRequested = Notification.Name("speedDownRequested")
+    static let toggleTOCRequested = Notification.Name("toggleTOCRequested")
 }

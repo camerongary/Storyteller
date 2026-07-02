@@ -61,7 +61,7 @@ final class ClickableTextView: NSTextView {
         if charIdx < string.count {
             onCharacterTapped?(charIdx)
         }
-        // Don't call super — we don't want text selection cursor changing
+        super.mouseDown(with: event)  // enables drag-to-select for Copy/Look Up/Services
     }
 
     override func keyDown(with event: NSEvent) {
@@ -72,8 +72,8 @@ final class ClickableTextView: NSTextView {
         }
     }
 
-    // Suppress right-click context menu
-    override func menu(for event: NSEvent) -> NSMenu? { nil }
+    // Standard context menu: Copy, Look Up, Translate, Search with Google, Services
+    override func menu(for event: NSEvent) -> NSMenu? { super.menu(for: event) }
 }
 
 // MARK: - NSViewRepresentable
@@ -97,7 +97,7 @@ struct HighlightedTextView: NSViewRepresentable {
 
         let textView = ClickableTextView()
         textView.isEditable = false
-        textView.isSelectable = false
+        textView.isSelectable = true
         textView.isRichText = false
         textView.backgroundColor = Theme.background(isDark)
         textView.drawsBackground = true
@@ -161,7 +161,7 @@ struct HighlightedTextView: NSViewRepresentable {
             } else {
                 coord.baseStorage = nil
                 textView.textStorage?.setAttributedString(
-                    NSAttributedString(string: "Open a .txt or .epub file to begin.",
+                    NSAttributedString(string: "Open a .txt, .epub, .pdf, or .rtf file to begin.",
                                        attributes: placeholderAttrs())
                 )
             }

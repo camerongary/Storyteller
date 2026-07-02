@@ -89,41 +89,40 @@ struct ContentView: View {
             openFilePicker()
         }
         .onReceive(NotificationCenter.default.publisher(for: .openFileURL)) { note in
-            if let url = note.object as? URL {
-                loadFile(url: url)
+            if let url = note.object as? URL { loadFile(url: url) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .playPauseRequested)) { _ in
+            speech.pauseResume()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .nextChapterRequested)) { _ in
+            speech.nextChapter()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .prevChapterRequested)) { _ in
+            speech.prevChapter()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .speedUpRequested)) { _ in
+            speech.speechRate = min(1.5, speech.speechRate + 0.1)
+            if speech.isSpeaking { speech.play(from: speech.currentWordRange?.location ?? speech.currentOffset) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .speedDownRequested)) { _ in
+            speech.speechRate = max(0.5, speech.speechRate - 0.1)
+            if speech.isSpeaking { speech.play(from: speech.currentWordRange?.location ?? speech.currentOffset) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .toggleTOCRequested)) { _ in
+            showTOC.toggle()
+        }
+        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+            guard let provider = providers.first else { return false }
+            provider.loadItem(forTypeIdentifier: "public.file-url", options: nil) { item, _ in
+                guard let data = item as? Data,
+                      let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
+                DispatchQueue.main.async { loadFile(url: url) }
             }
+            return true
         }
         .onAppear {
             speech.textProcessor = textProcessor
-            NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-                if event.keyCode == 49, NSApp.keyWindow != nil { // spacebar
-                    speech.pauseResume()
-                    return nil
-                }
-                if event.keyCode == 33, NSApp.keyWindow != nil { // [ = slower
-                    speech.speechRate = max(0.5, speech.speechRate - 0.1)
-                    return nil
-                }
-                if event.keyCode == 30, NSApp.keyWindow != nil { // ] = faster
-                    speech.speechRate = min(1.5, speech.speechRate + 0.1)
-                    return nil
-                }
-                return event
-            }
-            // Double-click anywhere in the window → zoom / minimise per system preference.
-            // (Equivalent to double-clicking a native title bar.)
-            NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
-                guard event.clickCount == 2 else { return event }
-                guard let window = event.window ?? NSApp.keyWindow else { return event }
-                let pref = UserDefaults.standard
-                    .string(forKey: "AppleActionOnDoubleClick") ?? "Maximize"
-                switch pref {
-                case "Minimize": window.miniaturize(nil)
-                case "None":     break
-                default:         window.zoom(nil)
-                }
-                return event
-            }
+            setupEventMonitors()
         }
         .onChange(of: textProcessor?.fullText) { _ in
             speech.textProcessor = textProcessor
@@ -163,18 +162,19 @@ struct ContentView: View {
             }
             .buttonStyle(.plain)
             .disabled((textProcessor?.chapters.isEmpty) ?? true)
-            .help("Table of Contents")
+            .help("Table of Contents  ⌘\\")
+            .accessibilityLabel("Table of Contents")
 
             Divider().frame(height: 22).background(isDark ? Color(white: 0.30) : Color(white: 0.60))
 
-            // Prev chapter / sentence
+            // Prev chapter / sentence — shortcut declared in Commands (Playback menu)
             Button(action: { speech.prevChapter() }) {
                 Image(systemName: "backward.end.fill")
             }
             .buttonStyle(ToolbarButtonStyle(isDark: isDark))
             .disabled(textProcessor == nil)
-            .help(textProcessor?.chapters.isEmpty == false ? "Previous chapter" : "Previous sentence")
-            .keyboardShortcut(.leftArrow, modifiers: [.command])
+            .help(textProcessor?.chapters.isEmpty == false ? "Previous Chapter  ⌘←" : "Previous Sentence  ⌘←")
+            .accessibilityLabel(textProcessor?.chapters.isEmpty == false ? "Previous Chapter" : "Previous Sentence")
 
             // Play / Pause
             Button(action: { speech.pauseResume() }) {
@@ -187,15 +187,16 @@ struct ContentView: View {
             }
             .buttonStyle(.plain)
             .disabled(textProcessor == nil)
+            .accessibilityLabel(speech.isSpeaking && !speech.isPaused ? "Pause" : "Play")
 
-            // Next chapter / sentence
+            // Next chapter / sentence — shortcut declared in Commands (Playback menu)
             Button(action: { speech.nextChapter() }) {
                 Image(systemName: "forward.end.fill")
             }
             .buttonStyle(ToolbarButtonStyle(isDark: isDark))
             .disabled(textProcessor == nil)
-            .help(textProcessor?.chapters.isEmpty == false ? "Next chapter" : "Next sentence")
-            .keyboardShortcut(.rightArrow, modifiers: [.command])
+            .help(textProcessor?.chapters.isEmpty == false ? "Next Chapter  ⌘→" : "Next Sentence  ⌘→")
+            .accessibilityLabel(textProcessor?.chapters.isEmpty == false ? "Next Chapter" : "Next Sentence")
 
             Divider().frame(height: 22).background(isDark ? Color(white: 0.30) : Color(white: 0.60))
 
@@ -203,12 +204,15 @@ struct ContentView: View {
             HStack(spacing: 6) {
                 Button(action: {
                     speech.speechRate = max(0.5, speech.speechRate - 0.1)
+                    if speech.isSpeaking { speech.play(from: speech.currentWordRange?.location ?? speech.currentOffset) }
                 }) {
                     Image(systemName: "tortoise.fill")
                         .foregroundColor(isDark ? Color(white: 0.55) : Color(white: 0.40))
                         .font(.system(size: 11))
                 }
                 .buttonStyle(.plain)
+                .help("Slower  [")
+                .accessibilityLabel("Slower")
 
                 Slider(value: $speech.speechRate, in: 0.5...1.5) { editing in
                     if !editing, speech.isSpeaking {
@@ -218,15 +222,19 @@ struct ContentView: View {
                 }
                 .frame(width: 90)
                 .tint(Color(nsColor: Theme.wordHighlight))
+                .accessibilityLabel("Playback Speed")
 
                 Button(action: {
                     speech.speechRate = min(1.5, speech.speechRate + 0.1)
+                    if speech.isSpeaking { speech.play(from: speech.currentWordRange?.location ?? speech.currentOffset) }
                 }) {
                     Image(systemName: "hare.fill")
                         .foregroundColor(isDark ? Color(white: 0.55) : Color(white: 0.40))
                         .font(.system(size: 11))
                 }
                 .buttonStyle(.plain)
+                .help("Faster  ]")
+                .accessibilityLabel("Faster")
             }
 
             Divider().frame(height: 22).background(isDark ? Color(white: 0.30) : Color(white: 0.60))
@@ -241,6 +249,7 @@ struct ContentView: View {
             }
             .buttonStyle(.plain)
             .help("Toggle repeated-word highlighting")
+            .accessibilityLabel(showRepeatHighlight ? "Repeated Words On" : "Repeated Words Off")
 
             Divider().frame(height: 22).background(isDark ? Color(white: 0.30) : Color(white: 0.60))
 
@@ -276,6 +285,7 @@ struct ContentView: View {
             }
             .menuStyle(.borderlessButton)
             .frame(maxWidth: 130)
+            .accessibilityLabel("Voice")
 
             Spacer()
 
@@ -290,7 +300,8 @@ struct ContentView: View {
                     .foregroundColor(isDark ? Color(white: 0.55) : Color(white: 0.40))
             }
             .buttonStyle(.plain)
-            .help("Help")
+            .help("Storyteller Help")
+            .accessibilityLabel("Help")
         }
     }
 
@@ -327,6 +338,31 @@ struct ContentView: View {
 
     // MARK: - Helpers
 
+    private func setupEventMonitors() {
+        // Spacebar: play/pause. Can't be a menu shortcut, so we intercept here.
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [self] event in
+            guard NSApp.keyWindow != nil else { return event }
+            if event.keyCode == 49 {
+                speech.pauseResume()
+                return nil
+            }
+            return event
+        }
+        // Double-click anywhere → zoom/minimise per "AppleActionOnDoubleClick" preference.
+        NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
+            guard event.clickCount == 2 else { return event }
+            let win: NSWindow? = event.window ?? NSApp.keyWindow
+            guard let win else { return event }
+            let pref = UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick") ?? "Maximize"
+            switch pref {
+            case "Minimize": win.miniaturize(nil)
+            case "None":     break
+            default:         win.zoom(nil)
+            }
+            return event
+        }
+    }
+
     private func openFilePicker() {
         let panel = NSOpenPanel()
         var types: [UTType] = [.plainText, .pdf,
@@ -353,6 +389,9 @@ struct ContentView: View {
         fileName = url.lastPathComponent
         showTOC = false
         RecentFilesManager.shared.add(url)
+        // Window title + proxy icon — shows in Mission Control, Exposé, and title bar
+        NSApp.keyWindow?.title = url.deletingPathExtension().lastPathComponent
+        NSApp.keyWindow?.representedURL = url
 
         Task {
             do {
