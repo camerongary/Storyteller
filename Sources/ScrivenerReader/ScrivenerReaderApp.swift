@@ -76,6 +76,29 @@ struct ScrivenerReaderApp: App {
                 .keyboardShortcut("]", modifiers: [])
             }
 
+            // ── Edit menu: Find ───────────────────────────────────────────────
+            CommandGroup(after: .textEditing) {
+                Button("Find\u{2026}") {
+                    NotificationCenter.default.post(name: .findRequested, object: nil)
+                }
+                .keyboardShortcut("f", modifiers: .command)
+
+                Button("Find Next") {
+                    NotificationCenter.default.post(name: .findNextRequested, object: nil)
+                }
+                .keyboardShortcut("g", modifiers: .command)
+
+                Button("Find Previous") {
+                    NotificationCenter.default.post(name: .findPreviousRequested, object: nil)
+                }
+                .keyboardShortcut("g", modifiers: [.command, .shift])
+
+                Button("Use Selection for Find") {
+                    NotificationCenter.default.post(name: .useSelectionForFindRequested, object: nil)
+                }
+                .keyboardShortcut("e", modifiers: .command)
+            }
+
             // ── View menu ─────────────────────────────────────────────────────
             CommandMenu("View") {
                 Button("Toggle Table of Contents") {
@@ -155,4 +178,8 @@ extension Notification.Name {
     static let addCommentRequested  = Notification.Name("addCommentRequested")
     static let addRevisionRequested = Notification.Name("addRevisionRequested")
     static let exportNotesRequested = Notification.Name("exportNotesRequested")
+    static let findRequested         = Notification.Name("findRequested")
+    static let findNextRequested     = Notification.Name("findNextRequested")
+    static let findPreviousRequested = Notification.Name("findPreviousRequested")
+    static let useSelectionForFindRequested = Notification.Name("useSelectionForFindRequested")
 }

@@ -126,6 +126,9 @@ struct HighlightedTextView: NSViewRepresentable {
         let textView = ClickableTextView()
         textView.isEditable = false
         textView.isSelectable = true
+        // Native find bar (⌘F) with incremental match highlighting
+        textView.usesFindBar = true
+        textView.isIncrementalSearchingEnabled = true
         textView.isRichText = false
         textView.backgroundColor = Theme.background(isDark)
         textView.drawsBackground = true

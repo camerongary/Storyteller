@@ -17,6 +17,15 @@ final class TextViewProxy {
     func scroll(to range: NSRange) {
         textView?.scrollRangeToVisible(range)
     }
+
+    /// Drive the text view's native find bar (show, next/previous match, …).
+    func performFind(_ action: NSTextFinder.Action) {
+        guard let tv = textView else { return }
+        tv.window?.makeFirstResponder(tv)
+        let item = NSMenuItem()
+        item.tag = action.rawValue
+        tv.performTextFinderAction(item)
+    }
 }
 
 // MARK: - Draft model for the editor sheet

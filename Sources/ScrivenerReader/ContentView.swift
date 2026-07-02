@@ -372,7 +372,9 @@ struct ContentView: View {
             .playPauseRequested, .nextChapterRequested, .prevChapterRequested,
             .speedUpRequested, .speedDownRequested,
             .toggleTOCRequested, .toggleNotesRequested,
-            .addCommentRequested, .addRevisionRequested, .exportNotesRequested
+            .addCommentRequested, .addRevisionRequested, .exportNotesRequested,
+            .findRequested, .findNextRequested, .findPreviousRequested,
+            .useSelectionForFindRequested
         ]
         return Publishers.MergeMany(
             names.map { name in
@@ -397,6 +399,10 @@ struct ContentView: View {
         case .addCommentRequested:  beginNote(kind: .comment, range: nil)
         case .addRevisionRequested: beginNote(kind: .revision, range: nil)
         case .exportNotesRequested: exportNotes()
+        case .findRequested:         textProxy.performFind(.showFindInterface)
+        case .findNextRequested:     textProxy.performFind(.nextMatch)
+        case .findPreviousRequested: textProxy.performFind(.previousMatch)
+        case .useSelectionForFindRequested: textProxy.performFind(.setSearchString)
         default: break
         }
     }
