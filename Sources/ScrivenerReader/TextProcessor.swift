@@ -17,16 +17,48 @@ class TextProcessor {
     private(set) var sentences: [Sentence] = []
     private(set) var wordTokens: [WordToken] = []
     private(set) var repeatedWordLocations: Set<Int> = []
+    /// Word count of each chapter, parallel to `chapters`.
+    private(set) var chapterWordCounts: [Int] = []
 
+    /// Common function words excluded from repeated-word highlighting.
     private let stopWords: Set<String> = [
-        "the","a","an","and","or","but","in","on","at","to","for","of","with",
-        "by","from","is","was","are","were","be","been","being","have","has",
-        "had","do","does","did","will","would","could","should","may","might",
-        "shall","i","you","he","she","it","we","they","me","him","her","us",
-        "them","my","your","his","its","our","their","this","that","these",
-        "those","not","no","as","if","so","then","than","when","where","who",
-        "what","which","up","out","about","into","through","after","before",
-        "just","also","very","more","can","one","two","all","some","any","said"
+        // Articles, conjunctions, prepositions
+        "the","a","an","and","or","but","nor","yet","in","on","at","to","for",
+        "of","with","by","from","as","into","onto","upon","over","under",
+        "above","below","between","among","through","during","before","after",
+        "until","till","since","about","against","along","around","behind",
+        "beneath","beside","besides","beyond","despite","except","inside",
+        "outside","toward","towards","within","without","across","near","off",
+        "past","per","via","because","although","though","while","whereas",
+        "unless","whether","if","then","than","that","so",
+        // Pronouns and determiners
+        "i","you","he","she","it","we","they","me","him","her","us","them",
+        "my","your","his","its","our","their","mine","yours","hers","ours",
+        "theirs","myself","yourself","himself","herself","itself","ourselves",
+        "themselves","this","these","those","who","whom","whose","which",
+        "what","whatever","whoever","anyone","anybody","anything","everyone",
+        "everybody","everything","someone","somebody","something","nobody",
+        "nothing","none","each","either","neither","both","few","many","much",
+        "most","more","less","least","other","another","such","same","own",
+        "all","some","any","several","every",
+        // Auxiliary and very common verbs
+        "is","am","was","are","were","be","been","being","have","has","had",
+        "having","do","does","did","doing","done","will","would","could",
+        "should","may","might","must","shall","can","cannot","get","gets",
+        "got","gotten","getting","said","says","say","went","goes","going",
+        "gone","came","come","comes","coming","made","make","makes","making",
+        "took","take","takes","taken","taking","put","puts","let","lets",
+        // Adverbs and fillers
+        "not","no","nor","only","just","also","very","too","quite","rather",
+        "really","still","even","again","once","twice","never","always",
+        "often","sometimes","usually","ever","yet","already","almost","enough",
+        "perhaps","maybe","however","therefore","thus","hence","instead",
+        "meanwhile","moreover","otherwise","anyway","indeed","further",
+        "up","out","down","back","away","here","there","where","when","why",
+        "how","then","now","soon","later","ago","far","well","else","away",
+        // Numbers and misc
+        "one","two","three","four","five","six","seven","eight","nine","ten",
+        "first","second","third","last","next","new","old","own"
     ]
 
     init(text: String, chapters: [(title: String, charOffset: Int)] = []) {
@@ -49,6 +81,29 @@ class TextProcessor {
         tokenizeWords()
         tokenizeSentences()
         findRepeatedWords()
+        computeChapterWordCounts()
+    }
+
+    private func computeChapterWordCounts() {
+        guard !chapters.isEmpty else { return }
+        let textLength = (fullText as NSString).length
+        var counts: [Int] = []
+        for (i, ch) in chapters.enumerated() {
+            let start = ch.charOffset
+            let end = i + 1 < chapters.count ? chapters[i + 1].charOffset : textLength
+            counts.append(firstTokenIndex(atOrAfter: end) - firstTokenIndex(atOrAfter: start))
+        }
+        chapterWordCounts = counts
+    }
+
+    /// Index of the first word token starting at or after `pos` (binary search).
+    private func firstTokenIndex(atOrAfter pos: Int) -> Int {
+        var lo = 0, hi = wordTokens.count
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            if wordTokens[mid].range.location < pos { lo = mid + 1 } else { hi = mid }
+        }
+        return lo
     }
 
     private func tokenizeWords() {

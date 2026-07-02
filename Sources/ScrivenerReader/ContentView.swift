@@ -339,6 +339,16 @@ struct ContentView: View {
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(isDark ? Color(white: 0.55) : Color(white: 0.40))
 
+            if let info = currentChapterInfo() {
+                Text("·")
+                    .foregroundColor(isDark ? Color(white: 0.30) : Color(white: 0.50))
+                Text(info)
+                    .font(.system(size: 12))
+                    .foregroundColor(isDark ? Color(white: 0.45) : Color(white: 0.35))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+
             Spacer()
 
             if let tp = textProcessor {
@@ -566,6 +576,26 @@ struct ContentView: View {
 
     private func voiceDisplayName(_ voice: NSSpeechSynthesizer.VoiceName) -> String {
         SpeechManager.displayName(for: voice)
+    }
+
+    /// "Chapter Three — 2,341 words, 13 min" for the status bar.
+    private func currentChapterInfo() -> String? {
+        guard let tp = textProcessor,
+              let ci = currentChapterIndex,
+              ci < tp.chapterWordCounts.count else { return nil }
+        let words = tp.chapterWordCounts[ci]
+        let title = tp.chapters[ci].title
+        return "\(title) — \(words.formatted()) words, \(readingTimeString(words: words))"
+    }
+
+    /// Estimated listening time at the current speech rate (~180 wpm at 1.0×).
+    private func readingTimeString(words: Int) -> String {
+        let wpm = 180.0 * Double(speech.speechRate)
+        let minutes = Double(words) / max(wpm, 1)
+        if minutes < 1 { return "under 1 min" }
+        let total = Int(minutes.rounded())
+        if total < 60 { return "\(total) min" }
+        return "\(total / 60) hr \(total % 60) min"
     }
 
     private func currentWordIndex(tp: TextProcessor) -> Int {
