@@ -203,7 +203,7 @@ struct ContentView: View {
             .accessibilityLabel(textProcessor?.chapters.isEmpty == false ? "Previous Chapter" : "Previous Sentence")
 
             // Play / Pause
-            Button(action: { speech.pauseResume() }) {
+            Button(action: { playPause() }) {
                 Image(systemName: speech.isSpeaking && !speech.isPaused
                       ? "pause.circle.fill" : "play.circle.fill")
                     .font(.system(size: 24))
@@ -389,7 +389,7 @@ struct ContentView: View {
         switch name {
         case .showHelp:             openWindow(id: "help")
         case .openFileRequested:    openFilePicker()
-        case .playPauseRequested:   speech.pauseResume()
+        case .playPauseRequested:   playPause()
         case .nextChapterRequested: speech.nextChapter()
         case .prevChapterRequested: speech.prevChapter()
         case .speedUpRequested:     changeSpeed(by: +0.1)
@@ -405,6 +405,19 @@ struct ContentView: View {
         case .useSelectionForFindRequested: textProxy.performFind(.setSearchString)
         default: break
         }
+    }
+
+    /// Play/pause with selection awareness: when starting playback while text
+    /// is selected (e.g. a ⌘F match), start reading from the selection instead
+    /// of resuming the old position. Pausing is unaffected.
+    private func playPause() {
+        let activelyPlaying = speech.isSpeaking && !speech.isPaused
+        if !activelyPlaying, let sel = textProxy.selectedRange() {
+            textProxy.collapseSelection()
+            speech.jumpTo(charPosition: sel.location, startPlaying: true)
+            return
+        }
+        speech.pauseResume()
     }
 
     private func changeSpeed(by delta: Float) {
@@ -425,7 +438,7 @@ struct ContentView: View {
                 return event
             }
             if event.keyCode == 49 {
-                speech.pauseResume()
+                playPause()
                 return nil
             }
             return event

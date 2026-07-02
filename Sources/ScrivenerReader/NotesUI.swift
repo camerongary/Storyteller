@@ -18,6 +18,12 @@ final class TextViewProxy {
         textView?.scrollRangeToVisible(range)
     }
 
+    /// Collapse the selection to its start (after playback jumps there).
+    func collapseSelection() {
+        guard let tv = textView else { return }
+        tv.setSelectedRange(NSRange(location: tv.selectedRange().location, length: 0))
+    }
+
     /// Drive the text view's native find bar (show, next/previous match, …).
     func performFind(_ action: NSTextFinder.Action) {
         guard let tv = textView else { return }
