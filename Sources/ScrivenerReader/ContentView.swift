@@ -58,6 +58,7 @@ struct ContentView: View {
                                 // from there; otherwise just move the position without
                                 // starting playback (startPlaying defaults to false).
                                 speech.jumpTo(charPosition: offset)
+                                scrollToCurrentIfIdle()
                             },
                             onActivate:  { offset in
                                 // Double-click: jump there and start reading.
@@ -207,7 +208,7 @@ struct ContentView: View {
             Divider().frame(height: 22).background(isDark ? Color(white: 0.30) : Color(white: 0.60))
 
             // Prev chapter / sentence — shortcut declared in Commands (Playback menu)
-            Button(action: { speech.prevChapter() }) {
+            Button(action: { speech.prevChapter(); scrollToCurrentIfIdle() }) {
                 Image(systemName: "backward.end.fill")
             }
             .buttonStyle(ToolbarButtonStyle(isDark: isDark))
@@ -229,7 +230,7 @@ struct ContentView: View {
             .accessibilityLabel(speech.isSpeaking && !speech.isPaused ? "Pause" : "Play")
 
             // Next chapter / sentence — shortcut declared in Commands (Playback menu)
-            Button(action: { speech.nextChapter() }) {
+            Button(action: { speech.nextChapter(); scrollToCurrentIfIdle() }) {
                 Image(systemName: "forward.end.fill")
             }
             .buttonStyle(ToolbarButtonStyle(isDark: isDark))
@@ -430,8 +431,8 @@ struct ContentView: View {
         case .showHelp:             openWindow(id: "help")
         case .openFileRequested:    openFilePicker()
         case .playPauseRequested:   playPause()
-        case .nextChapterRequested: speech.nextChapter()
-        case .prevChapterRequested: speech.prevChapter()
+        case .nextChapterRequested: speech.nextChapter(); scrollToCurrentIfIdle()
+        case .prevChapterRequested: speech.prevChapter(); scrollToCurrentIfIdle()
         case .speedUpRequested:     changeSpeed(by: +0.1)
         case .speedDownRequested:   changeSpeed(by: -0.1)
         case .toggleTOCRequested:   showTOC.toggle()
@@ -446,6 +447,13 @@ struct ContentView: View {
         case .exportAudioRequested: exportAudio()
         default: break
         }
+    }
+
+    /// When playback isn't actively running, word highlights don't drive
+    /// scrolling — so navigation must scroll the text view itself.
+    private func scrollToCurrentIfIdle() {
+        guard !(speech.isSpeaking && !speech.isPaused) else { return }
+        textProxy.scroll(to: NSRange(location: speech.currentOffset, length: 0))
     }
 
     /// Play/pause with selection awareness: when starting playback while text
