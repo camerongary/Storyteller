@@ -42,6 +42,7 @@ struct ScrivenerReaderApp: App {
                 Button("Export as MP3\u{2026}") {
                     NotificationCenter.default.post(name: .exportAudioRequested, object: nil)
                 }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
 
                 Divider()
 
