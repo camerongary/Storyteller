@@ -84,6 +84,9 @@ struct NoteEditorSheet: View {
                     .stroke(Color.secondary.opacity(0.3), lineWidth: 1))
 
             HStack {
+                Text("\u{2318}\u{21A9} to save")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
                 Spacer()
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
@@ -91,7 +94,8 @@ struct NoteEditorSheet: View {
                     onSave(draft)
                     dismiss()
                 }
-                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.return, modifiers: .command)
                 .disabled(draft.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
@@ -184,8 +188,18 @@ private struct NoteRow: View {
         .contextMenu {
             Button("Edit\u{2026}") { onEdit() }
             Divider()
+            Button("Copy Note") { copyToPasteboard(note.content) }
+            if !note.quote.isEmpty {
+                Button("Copy Quote") { copyToPasteboard(note.quote) }
+            }
+            Divider()
             Button("Delete") { onDelete() }
         }
         .accessibilityLabel("\(note.kind == .revision ? "Revision" : "Comment"): \(note.content)")
+    }
+
+    private func copyToPasteboard(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 }

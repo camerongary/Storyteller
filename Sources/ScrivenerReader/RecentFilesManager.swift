@@ -1,6 +1,21 @@
 import Foundation
 import Combine
 
+/// Remembers the reading position per document so reopening a file
+/// resumes where the user left off.
+enum ReadingPosition {
+    private static func key(for url: URL) -> String { "readingPosition:\(url.path)" }
+
+    static func save(_ offset: Int, for url: URL) {
+        UserDefaults.standard.set(offset, forKey: key(for: url))
+    }
+
+    static func load(for url: URL) -> Int? {
+        let v = UserDefaults.standard.integer(forKey: key(for: url))
+        return v > 0 ? v : nil
+    }
+}
+
 /// Persists up to 10 recently opened file URLs across launches.
 /// Uses security-scoped bookmarks so sandboxed access is preserved.
 final class RecentFilesManager: ObservableObject {

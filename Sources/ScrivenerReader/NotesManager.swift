@@ -23,7 +23,9 @@ struct Note: Identifiable, Codable, Equatable {
 /// of the source file's path. Notes are re-anchored by their quoted text when
 /// the document's contents have shifted since they were made.
 final class NotesManager: ObservableObject {
-    @Published private(set) var notes: [Note] = []
+    @Published private(set) var notes: [Note] = [] {
+        didSet { AppState.shared.hasNotes = !notes.isEmpty }
+    }
     private var documentURL: URL?
 
     private static let dir: URL = {
@@ -75,26 +77,44 @@ final class NotesManager: ObservableObject {
         }
     }
 
-    // MARK: - Mutation
+    // MARK: - Mutation (undoable)
 
-    func add(kind: NoteKind, range: NSRange, quote: String, content: String) {
-        notes.append(Note(id: UUID(), kind: kind,
-                          location: range.location, length: range.length,
-                          quote: quote, content: content, created: Date()))
-        notes.sort { $0.location < $1.location }
+    func add(kind: NoteKind, range: NSRange, quote: String, content: String,
+             undoManager: UndoManager? = nil) {
+        let note = Note(id: UUID(), kind: kind,
+                        location: range.location, length: range.length,
+                        quote: quote, content: content, created: Date())
+        insert(note, undoManager: undoManager, actionName: "Add Note")
+    }
+
+    func update(_ note: Note, undoManager: UndoManager? = nil) {
+        guard let i = notes.firstIndex(where: { $0.id == note.id }) else { return }
+        let old = notes[i]
+        notes[i] = note
         save()
-    }
-
-    func update(_ note: Note) {
-        if let i = notes.firstIndex(where: { $0.id == note.id }) {
-            notes[i] = note
-            save()
+        undoManager?.registerUndo(withTarget: self) { mgr in
+            mgr.update(old, undoManager: undoManager)
         }
+        undoManager?.setActionName("Edit Note")
     }
 
-    func delete(_ note: Note) {
+    func delete(_ note: Note, undoManager: UndoManager? = nil) {
         notes.removeAll { $0.id == note.id }
         save()
+        undoManager?.registerUndo(withTarget: self) { mgr in
+            mgr.insert(note, undoManager: undoManager, actionName: "Delete Note")
+        }
+        undoManager?.setActionName("Delete Note")
+    }
+
+    private func insert(_ note: Note, undoManager: UndoManager?, actionName: String) {
+        notes.append(note)
+        notes.sort { $0.location < $1.location }
+        save()
+        undoManager?.registerUndo(withTarget: self) { mgr in
+            mgr.delete(note, undoManager: undoManager)
+        }
+        undoManager?.setActionName(actionName)
     }
 
     // MARK: - Export

@@ -1,9 +1,19 @@
 import SwiftUI
 
+/// Shared flags the menu bar uses to enable/disable commands.
+final class AppState: ObservableObject {
+    static let shared = AppState()
+    @Published var documentLoaded = false
+    @Published var hasChapters = false
+    @Published var hasNotes = false
+    private init() {}
+}
+
 @main
 struct ScrivenerReaderApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var recents = RecentFilesManager.shared
+    @StateObject private var appState = AppState.shared
 
     var body: some Scene {
         WindowGroup {
@@ -43,6 +53,7 @@ struct ScrivenerReaderApp: App {
                     NotificationCenter.default.post(name: .exportAudioRequested, object: nil)
                 }
                 .keyboardShortcut("e", modifiers: [.command, .shift])
+                .disabled(!appState.documentLoaded)
 
                 Divider()
 
@@ -57,6 +68,7 @@ struct ScrivenerReaderApp: App {
                 Button("Play / Pause") {
                     NotificationCenter.default.post(name: .playPauseRequested, object: nil)
                 }
+                .disabled(!appState.documentLoaded)
 
                 Divider()
 
@@ -64,11 +76,13 @@ struct ScrivenerReaderApp: App {
                     NotificationCenter.default.post(name: .prevChapterRequested, object: nil)
                 }
                 .keyboardShortcut(.leftArrow, modifiers: .command)
+                .disabled(!appState.documentLoaded)
 
                 Button("Next Chapter") {
                     NotificationCenter.default.post(name: .nextChapterRequested, object: nil)
                 }
                 .keyboardShortcut(.rightArrow, modifiers: .command)
+                .disabled(!appState.documentLoaded)
 
                 Divider()
 
@@ -89,21 +103,25 @@ struct ScrivenerReaderApp: App {
                     NotificationCenter.default.post(name: .findRequested, object: nil)
                 }
                 .keyboardShortcut("f", modifiers: .command)
+                .disabled(!appState.documentLoaded)
 
                 Button("Find Next") {
                     NotificationCenter.default.post(name: .findNextRequested, object: nil)
                 }
                 .keyboardShortcut("g", modifiers: .command)
+                .disabled(!appState.documentLoaded)
 
                 Button("Find Previous") {
                     NotificationCenter.default.post(name: .findPreviousRequested, object: nil)
                 }
                 .keyboardShortcut("g", modifiers: [.command, .shift])
+                .disabled(!appState.documentLoaded)
 
                 Button("Use Selection for Find") {
                     NotificationCenter.default.post(name: .useSelectionForFindRequested, object: nil)
                 }
                 .keyboardShortcut("e", modifiers: .command)
+                .disabled(!appState.documentLoaded)
             }
 
             // ── View menu ─────────────────────────────────────────────────────
@@ -112,11 +130,13 @@ struct ScrivenerReaderApp: App {
                     NotificationCenter.default.post(name: .toggleTOCRequested, object: nil)
                 }
                 .keyboardShortcut("\\", modifiers: .command)
+                .disabled(!appState.hasChapters)
 
                 Button("Toggle Notes") {
                     NotificationCenter.default.post(name: .toggleNotesRequested, object: nil)
                 }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
+                .disabled(!appState.documentLoaded)
             }
 
             // ── Notes menu ────────────────────────────────────────────────────
@@ -125,17 +145,20 @@ struct ScrivenerReaderApp: App {
                     NotificationCenter.default.post(name: .addCommentRequested, object: nil)
                 }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
+                .disabled(!appState.documentLoaded)
 
                 Button("Suggest Revision\u{2026}") {
                     NotificationCenter.default.post(name: .addRevisionRequested, object: nil)
                 }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
+                .disabled(!appState.documentLoaded)
 
                 Divider()
 
                 Button("Export Notes\u{2026}") {
                     NotificationCenter.default.post(name: .exportNotesRequested, object: nil)
                 }
+                .disabled(!appState.hasNotes)
             }
 
             // ── Help menu ─────────────────────────────────────────────────────

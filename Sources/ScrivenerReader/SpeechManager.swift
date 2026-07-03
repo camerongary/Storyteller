@@ -9,8 +9,14 @@ class SpeechManager: NSObject, ObservableObject, NSSpeechSynthesizerDelegate {
     @Published var isSpeaking = false
     @Published var currentWordRange: NSRange? = nil
     @Published var currentSentenceIndex: Int? = nil
-    @Published var speechRate: Float = 0.9          // multiplier of system default
-    @Published var selectedVoiceName: NSSpeechSynthesizer.VoiceName? = nil
+    @Published var speechRate: Float = 0.9 {        // multiplier of system default
+        didSet { UserDefaults.standard.set(speechRate, forKey: "speechRate") }
+    }
+    @Published var selectedVoiceName: NSSpeechSynthesizer.VoiceName? = nil {
+        didSet {
+            UserDefaults.standard.set(selectedVoiceName?.rawValue, forKey: "voiceIdentifier")
+        }
+    }
 
     var textProcessor: TextProcessor?
     var onWordChange: ((NSRange) -> Void)?
@@ -29,13 +35,22 @@ class SpeechManager: NSObject, ObservableObject, NSSpeechSynthesizerDelegate {
     override init() {
         super.init()
         synthesizer.delegate = self
-        // Default to best available voice: Ava Premium → Ava Enhanced → Ava → first in list
+
+        // Restore last speed
+        let savedRate = UserDefaults.standard.float(forKey: "speechRate")
+        if savedRate >= 0.5 && savedRate <= 1.5 { speechRate = savedRate }
+
+        // Restore last voice; fall back to best available Ava, then first voice.
+        let savedVoice = UserDefaults.standard.string(forKey: "voiceIdentifier")
+            .map { NSSpeechSynthesizer.VoiceName(rawValue: $0) }
+            .flatMap { SpeechManager.availableVoices.contains($0) ? $0 : nil }
         let preferred = ["com.apple.voice.premium.en-US.Ava",
                          "com.apple.voice.enhanced.en-US.Ava",
                          "com.apple.voice.compact.en-US.Ava"]
-        selectedVoiceName = preferred
-            .compactMap { NSSpeechSynthesizer.VoiceName(rawValue: $0) }
-            .first { SpeechManager.availableVoices.contains($0) }
+        selectedVoiceName = savedVoice
+            ?? preferred
+                .compactMap { NSSpeechSynthesizer.VoiceName(rawValue: $0) }
+                .first { SpeechManager.availableVoices.contains($0) }
             ?? SpeechManager.readingVoiceNames().first
             ?? NSSpeechSynthesizer.defaultVoice
         setupMediaKeys()

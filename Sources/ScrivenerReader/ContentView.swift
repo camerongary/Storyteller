@@ -12,8 +12,9 @@ struct ContentView: View {
     @State private var errorMessage: String? = nil
     @State private var isLoading = false
     @State private var showVoicePicker = false
-    @State private var showRepeatHighlight = false
+    @AppStorage("showRepeatHighlight") private var showRepeatHighlight = false
     @State private var showTOC = false
+    @State private var currentFileURL: URL? = nil
     @State private var showNotes = false
     @State private var noteDraft: NoteDraft? = nil
     @State private var textProxy = TextViewProxy()
@@ -96,7 +97,7 @@ struct ContentView: View {
                                                       range: note.range, quote: note.quote,
                                                       content: note.content)
                             },
-                            onDelete: { note in notesManager.delete(note) }
+                            onDelete: { note in notesManager.delete(note, undoManager: undoManager) }
                         )
                     }
                 }
@@ -138,6 +139,13 @@ struct ContentView: View {
         }
         .onChange(of: textProcessor?.fullText) { _ in
             speech.textProcessor = textProcessor
+        }
+        .onChange(of: speech.currentSentenceIndex) { _ in
+            // Remember the reading position so reopening the file resumes here.
+            if let url = currentFileURL, speech.currentOffset > 0 || speech.currentWordRange != nil {
+                ReadingPosition.save(speech.currentWordRange?.location ?? speech.currentOffset,
+                                     for: url)
+            }
         }
         .alert("Error", isPresented: Binding(
             get: { errorMessage != nil },
@@ -358,6 +366,14 @@ struct ContentView: View {
                     Text("Exporting audio\u{2026}")
                         .font(.system(size: 12))
                         .foregroundColor(isDark ? Color(white: 0.55) : Color(white: 0.40))
+                    Button(action: { audioExporter.cancel() }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(isDark ? Color(white: 0.55) : Color(white: 0.40))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Cancel Export")
+                    .accessibilityLabel("Cancel Export")
                 }
             }
 
@@ -503,14 +519,21 @@ struct ContentView: View {
         return tp.sentences[idx].range
     }
 
+    /// The main window's undo manager — note edits register here so
+    /// Edit → Undo/Redo work on notes.
+    private var undoManager: UndoManager? {
+        (NSApp.mainWindow ?? NSApp.keyWindow)?.undoManager
+    }
+
     private func saveNoteDraft(_ draft: NoteDraft) {
         if var existing = draft.existing {
             existing.kind = draft.kind
             existing.content = draft.content
-            notesManager.update(existing)
+            notesManager.update(existing, undoManager: undoManager)
         } else {
             notesManager.add(kind: draft.kind, range: draft.range,
-                             quote: draft.quote, content: draft.content)
+                             quote: draft.quote, content: draft.content,
+                             undoManager: undoManager)
         }
     }
 
@@ -570,6 +593,8 @@ struct ContentView: View {
                     NSWorkspace.shared.activateFileViewerSelecting([url])
                 }
             case .failure(let error):
+                // Cancellation is user-initiated — no alert needed.
+                if case AudioExporter.ExportError.cancelled = error { return }
                 errorMessage = error.localizedDescription
             }
         }
@@ -618,6 +643,7 @@ struct ContentView: View {
         isLoading = true
         fileName = url.lastPathComponent
         showTOC = false
+        currentFileURL = url
         RecentFilesManager.shared.add(url)
         // Window title + proxy icon — shows in Mission Control, Exposé, and title bar
         NSApp.keyWindow?.title = url.deletingPathExtension().lastPathComponent
@@ -635,7 +661,17 @@ struct ContentView: View {
                     // and the notes panel if the document has notes.
                     if !tp.chapters.isEmpty { showTOC = true }
                     showNotes = !notesManager.notes.isEmpty
+                    AppState.shared.documentLoaded = true
+                    AppState.shared.hasChapters = !tp.chapters.isEmpty
                     isLoading = false
+                    // Resume where the user left off last time.
+                    let length = (doc.text as NSString).length
+                    if let saved = ReadingPosition.load(for: url), saved < length {
+                        speech.jumpTo(charPosition: saved)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                            textProxy.scroll(to: NSRange(location: saved, length: 0))
+                        }
+                    }
                 }
             } catch {
                 await MainActor.run {

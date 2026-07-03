@@ -9,11 +9,13 @@ final class AudioExporter: NSObject, ObservableObject, NSSpeechSynthesizerDelega
     enum ExportError: LocalizedError {
         case renderFailed
         case encodeFailed(String)
+        case cancelled
 
         var errorDescription: String? {
             switch self {
             case .renderFailed:          return "Speech rendering failed."
             case .encodeFailed(let msg): return "Audio encoding failed: \(msg)"
+            case .cancelled:             return "Export cancelled."
             }
         }
     }
@@ -24,6 +26,13 @@ final class AudioExporter: NSObject, ObservableObject, NSSpeechSynthesizerDelega
     private var aiffURL: URL?
     private var destURL: URL?
     private var completion: ((Result<URL, Error>) -> Void)?
+    private var cancelled = false
+
+    func cancel() {
+        guard isExporting else { return }
+        cancelled = true
+        synth?.stopSpeaking()   // delegate fires with finishedSpeaking == false
+    }
 
     private static let encoderPaths = [
         "/opt/homebrew/bin/lame", "/usr/local/bin/lame",
@@ -42,6 +51,7 @@ final class AudioExporter: NSObject, ObservableObject, NSSpeechSynthesizerDelega
                 completion: @escaping (Result<URL, Error>) -> Void) {
         guard !isExporting else { return }
         isExporting = true
+        cancelled = false
         self.destURL = dest
         self.completion = completion
 
@@ -63,6 +73,11 @@ final class AudioExporter: NSObject, ObservableObject, NSSpeechSynthesizerDelega
 
     func speechSynthesizer(_ sender: NSSpeechSynthesizer, didFinishSpeaking finishedSpeaking: Bool) {
         guard let aiff = aiffURL, let dest = destURL else { return }
+        guard !cancelled else {
+            try? FileManager.default.removeItem(at: aiff)
+            finish(.failure(ExportError.cancelled))
+            return
+        }
         guard finishedSpeaking,
               FileManager.default.fileExists(atPath: aiff.path) else {
             finish(.failure(ExportError.renderFailed))
