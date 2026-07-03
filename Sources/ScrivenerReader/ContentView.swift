@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @StateObject private var speech = SpeechManager()
     @StateObject private var notesManager = NotesManager()
+    @StateObject private var audioExporter = AudioExporter()
     @State private var textProcessor: TextProcessor? = nil
     @State private var fileName: String = ""
     @State private var errorMessage: String? = nil
@@ -351,6 +352,15 @@ struct ContentView: View {
 
             Spacer()
 
+            if audioExporter.isExporting {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Exporting audio\u{2026}")
+                        .font(.system(size: 12))
+                        .foregroundColor(isDark ? Color(white: 0.55) : Color(white: 0.40))
+                }
+            }
+
             if let tp = textProcessor {
                 let wordCount = tp.wordTokens.count
                 let current = currentWordIndex(tp: tp)
@@ -384,7 +394,7 @@ struct ContentView: View {
             .toggleTOCRequested, .toggleNotesRequested,
             .addCommentRequested, .addRevisionRequested, .exportNotesRequested,
             .findRequested, .findNextRequested, .findPreviousRequested,
-            .useSelectionForFindRequested
+            .useSelectionForFindRequested, .exportAudioRequested
         ]
         return Publishers.MergeMany(
             names.map { name in
@@ -413,6 +423,7 @@ struct ContentView: View {
         case .findNextRequested:     textProxy.performFind(.nextMatch)
         case .findPreviousRequested: textProxy.performFind(.previousMatch)
         case .useSelectionForFindRequested: textProxy.performFind(.setSearchString)
+        case .exportAudioRequested: exportAudio()
         default: break
         }
     }
@@ -500,6 +511,67 @@ struct ContentView: View {
         } else {
             notesManager.add(kind: draft.kind, range: draft.range,
                              quote: draft.quote, content: draft.content)
+        }
+    }
+
+    // MARK: - Audio export
+
+    private func exportAudio() {
+        guard let tp = textProcessor, !audioExporter.isExporting else { return }
+
+        // Scope: whole document, or just the current chapter when there are chapters.
+        var text = tp.fullText
+        var suffix = ""
+        if let ci = currentChapterIndex, !tp.chapters.isEmpty {
+            let alert = NSAlert()
+            alert.messageText = "Export as MP3"
+            alert.informativeText = "Export the entire document, or just \u{201C}\(tp.chapters[ci].title)\u{201D}?"
+            alert.addButton(withTitle: "Entire Document")
+            alert.addButton(withTitle: "Current Chapter")
+            alert.addButton(withTitle: "Cancel")
+            switch alert.runModal() {
+            case .alertSecondButtonReturn:
+                let ns = tp.fullText as NSString
+                let start = tp.chapters[ci].charOffset
+                let end = ci + 1 < tp.chapters.count ? tp.chapters[ci + 1].charOffset : ns.length
+                text = ns.substring(with: NSRange(location: start, length: end - start))
+                suffix = " — " + tp.chapters[ci].title
+            case .alertThirdButtonReturn:
+                return
+            default:
+                break
+            }
+        }
+
+        let useMP3 = AudioExporter.mp3EncoderAvailable
+        let ext = useMP3 ? "mp3" : "m4a"
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: ext) ?? .audio]
+        panel.nameFieldStringValue =
+            (fileName as NSString).deletingPathExtension + suffix + "." + ext
+        if !useMP3 {
+            panel.message = "No MP3 encoder found (install lame or ffmpeg via Homebrew) — exporting AAC (.m4a) instead."
+        }
+        guard panel.runModal() == .OK, let dest = panel.url else { return }
+
+        if speech.isSpeaking && !speech.isPaused { speech.pauseResume() }
+        audioExporter.export(text: text,
+                             voice: speech.selectedVoiceName,
+                             rate: speech.speechRate,
+                             to: dest) { result in
+            switch result {
+            case .success(let url):
+                let done = NSAlert()
+                done.messageText = "Export Complete"
+                done.informativeText = "Saved to \(url.lastPathComponent)."
+                done.addButton(withTitle: "Show in Finder")
+                done.addButton(withTitle: "OK")
+                if done.runModal() == .alertFirstButtonReturn {
+                    NSWorkspace.shared.activateFileViewerSelecting([url])
+                }
+            case .failure(let error):
+                errorMessage = error.localizedDescription
+            }
         }
     }
 

@@ -39,6 +39,12 @@ struct ScrivenerReaderApp: App {
 
                 Divider()
 
+                Button("Export as MP3\u{2026}") {
+                    NotificationCenter.default.post(name: .exportAudioRequested, object: nil)
+                }
+
+                Divider()
+
                 Button("Close") {
                     NSApp.keyWindow?.performClose(nil)
                 }
@@ -182,4 +188,5 @@ extension Notification.Name {
     static let findNextRequested     = Notification.Name("findNextRequested")
     static let findPreviousRequested = Notification.Name("findPreviousRequested")
     static let useSelectionForFindRequested = Notification.Name("useSelectionForFindRequested")
+    static let exportAudioRequested = Notification.Name("exportAudioRequested")
 }
