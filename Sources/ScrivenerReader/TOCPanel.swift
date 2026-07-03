@@ -4,7 +4,8 @@ struct TOCPanel: View {
     let chapters: [(title: String, charOffset: Int)]
     let activeIndex: Int?
     let isDark: Bool
-    let onSelect: (Int) -> Void   // charOffset
+    let onSelect: (Int) -> Void          // charOffset — click: move there
+    var onActivate: ((Int) -> Void)? = nil  // charOffset — double-click: move & play
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -14,10 +15,10 @@ struct TOCPanel: View {
                         TOCRow(
                             title:    ch.title,
                             isActive: activeIndex == i,
-                            isDark:   isDark
-                        ) {
-                            onSelect(ch.charOffset)
-                        }
+                            isDark:   isDark,
+                            action:       { onSelect(ch.charOffset) },
+                            doubleAction: { onActivate?(ch.charOffset) }
+                        )
                         .id(i)
                     }
                 }
@@ -48,31 +49,36 @@ private struct TOCRow: View {
     let title: String
     let isActive: Bool
     let isDark: Bool
-    let action: () -> Void
+    let action: () -> Void        // click: jump to chapter
+    let doubleAction: () -> Void  // double-click: jump and play
 
     var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 12, weight: isActive ? .semibold : .regular))
-                .foregroundColor(
-                    isActive
-                        ? Color(nsColor: Theme.repeatedActive(isDark))
-                        : (isDark ? Color(white: 0.72) : Color(white: 0.22))
-                )
-                .lineLimit(2)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(
-                    isActive
-                        ? (isDark
-                            ? Color(nsColor: NSColor(white: 0.16, alpha: 1))
-                            : Color(nsColor: NSColor(white: 0.84, alpha: 1)))
-                        : Color.clear
-                )
-                .cornerRadius(5)
-        }
-        .buttonStyle(.plain)
+        Text(title)
+            .font(.system(size: 12, weight: isActive ? .semibold : .regular))
+            .foregroundColor(
+                isActive
+                    ? Color(nsColor: Theme.repeatedActive(isDark))
+                    : (isDark ? Color(white: 0.72) : Color(white: 0.22))
+            )
+            .lineLimit(2)
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                isActive
+                    ? (isDark
+                        ? Color(nsColor: NSColor(white: 0.16, alpha: 1))
+                        : Color(nsColor: NSColor(white: 0.84, alpha: 1)))
+                    : Color.clear
+            )
+            .cornerRadius(5)
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2) { doubleAction() }
+            .onTapGesture { action() }
+            .accessibilityElement()
+            .accessibilityLabel(title)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { action() }
     }
 }

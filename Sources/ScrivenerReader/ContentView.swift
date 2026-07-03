@@ -58,6 +58,10 @@ struct ContentView: View {
                                 // from there; otherwise just move the position without
                                 // starting playback (startPlaying defaults to false).
                                 speech.jumpTo(charPosition: offset)
+                            },
+                            onActivate:  { offset in
+                                // Double-click: jump there and start reading.
+                                speech.jumpTo(charPosition: offset, startPlaying: true)
                             }
                         )
                         Divider().background(isDark ? Color(white: 0.20) : Color(white: 0.70))
@@ -480,11 +484,16 @@ struct ContentView: View {
             }
             return event
         }
-        // Double-click anywhere → zoom/minimise per "AppleActionOnDoubleClick" preference.
+        // Double-click in the toolbar band (acts as the title bar) → zoom/minimise
+        // per "AppleActionOnDoubleClick". Clicks lower in the window — text, TOC,
+        // notes — must not trigger this.
         NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
             guard event.clickCount == 2 else { return event }
             let win: NSWindow? = event.window ?? NSApp.keyWindow
-            guard let win else { return event }
+            guard let win, let content = win.contentView else { return event }
+            let p = content.convert(event.locationInWindow, from: nil)
+            let fromTop = content.isFlipped ? p.y : content.bounds.height - p.y
+            guard fromTop <= 52 else { return event }
             let pref = UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick") ?? "Maximize"
             switch pref {
             case "Minimize": win.miniaturize(nil)
