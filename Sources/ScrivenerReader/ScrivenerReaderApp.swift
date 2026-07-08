@@ -63,6 +63,15 @@ struct ScrivenerReaderApp: App {
                 .keyboardShortcut("w", modifiers: .command)
             }
 
+            // ── File menu: Print ──────────────────────────────────────────────
+            CommandGroup(replacing: .printItem) {
+                Button("Print\u{2026}") {
+                    NotificationCenter.default.post(name: .printRequested, object: nil)
+                }
+                .keyboardShortcut("p", modifiers: .command)
+                .disabled(!appState.documentLoaded)
+            }
+
             // ── Playback menu ─────────────────────────────────────────────────
             CommandMenu("Playback") {
                 Button("Play / Pause") {
@@ -137,6 +146,23 @@ struct ScrivenerReaderApp: App {
                 }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
                 .disabled(!appState.documentLoaded)
+
+                Divider()
+
+                Button("Make Text Bigger") {
+                    NotificationCenter.default.post(name: .textBiggerRequested, object: nil)
+                }
+                .keyboardShortcut("+", modifiers: .command)
+
+                Button("Make Text Smaller") {
+                    NotificationCenter.default.post(name: .textSmallerRequested, object: nil)
+                }
+                .keyboardShortcut("-", modifiers: .command)
+
+                Button("Actual Size") {
+                    NotificationCenter.default.post(name: .textActualSizeRequested, object: nil)
+                }
+                .keyboardShortcut("0", modifiers: .command)
             }
 
             // ── Notes menu ────────────────────────────────────────────────────
@@ -180,6 +206,11 @@ struct ScrivenerReaderApp: App {
 // MARK: - App Delegate (receives files opened by Scrivener / Finder)
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.servicesProvider = self
+        NSUpdateDynamicServices()
+    }
+
     func application(_ application: NSApplication, open urls: [URL]) {
         guard let url = urls.first else { return }
         NotificationCenter.default.post(name: .openFileURL, object: url)
@@ -189,6 +220,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let url = URL(fileURLWithPath: filename)
         NotificationCenter.default.post(name: .openFileURL, object: url)
         return true
+    }
+
+    /// System Services entry point — "Read in Storyteller" on any selected text.
+    @objc func readText(_ pboard: NSPasteboard, userData: String, error: NSErrorPointer) {
+        guard let text = pboard.string(forType: .string),
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Selected Text.txt")
+        do {
+            try text.write(to: url, atomically: true, encoding: .utf8)
+        } catch { return }
+        NSApp.activate(ignoringOtherApps: true)
+        NotificationCenter.default.post(name: .openFileURL, object: url)
     }
 }
 
@@ -213,4 +257,8 @@ extension Notification.Name {
     static let findPreviousRequested = Notification.Name("findPreviousRequested")
     static let useSelectionForFindRequested = Notification.Name("useSelectionForFindRequested")
     static let exportAudioRequested = Notification.Name("exportAudioRequested")
+    static let printRequested          = Notification.Name("printRequested")
+    static let textBiggerRequested     = Notification.Name("textBiggerRequested")
+    static let textSmallerRequested    = Notification.Name("textSmallerRequested")
+    static let textActualSizeRequested = Notification.Name("textActualSizeRequested")
 }

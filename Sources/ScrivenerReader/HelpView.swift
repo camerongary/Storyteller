@@ -41,6 +41,22 @@ struct HelpView: View {
                         ])
                     }
 
+                    // Text size
+                    helpSection(title: "Text Size") {
+                        shortcutTable(rows: [
+                            ("Bigger", "\u{2318}+"),
+                            ("Smaller", "\u{2318}\u{2212}"),
+                            ("Actual size", "\u{2318}0"),
+                        ])
+                    }
+
+                    // System integration
+                    helpSection(title: "Anywhere on your Mac") {
+                        bodyText(
+                            "Select text in any app and choose <App> \u{203A} Services \u{203A} Read in Storyteller to hear it read aloud. Print the open document with \u{2318}P."
+                        )
+                    }
+
                     // Highlighting
                     helpSection(title: "Highlighting") {
                         VStack(alignment: .leading, spacing: 6) {

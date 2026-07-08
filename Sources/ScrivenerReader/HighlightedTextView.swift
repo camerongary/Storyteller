@@ -9,6 +9,9 @@ enum Theme {
     static let wordHighlightFg  = NSColor(white: 0.05, alpha: 1)
     static let font             = NSFont(name: "Georgia", size: 19)
                                ?? NSFont.systemFont(ofSize: 19, weight: .regular)
+    static func font(ofSize size: CGFloat) -> NSFont {
+        NSFont(name: "Georgia", size: size) ?? NSFont.systemFont(ofSize: size, weight: .regular)
+    }
     static let lineHeightMult: CGFloat = 1.45
 
     // Mode-specific
@@ -112,6 +115,7 @@ struct HighlightedTextView: NSViewRepresentable {
     var noteRanges: [NSRange] = []
     var onAddNote: ((NSRange, Bool) -> Void)? = nil
     var proxy: TextViewProxy? = nil
+    var fontSize: CGFloat = 19
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -177,14 +181,16 @@ struct HighlightedTextView: NSViewRepresentable {
         let repeatChanged = coord.lastShowRepeat != showRepeatHighlight
         let notesSig = noteRanges.map { "\($0.location):\($0.length)" }.joined(separator: ",")
         let notesChanged = coord.lastNotesSig != notesSig
+        let fontChanged = coord.lastFontSize != fontSize
 
-        if textChanged || themeChanged || repeatChanged || notesChanged {
+        if textChanged || themeChanged || repeatChanged || notesChanged || fontChanged {
             coord.loadedText = textProcessor
             coord.lastWordRange = nil
             coord.lastSentenceIdx = nil
             coord.lastIsDark = isDark
             coord.lastShowRepeat = showRepeatHighlight
             coord.lastNotesSig = notesSig
+            coord.lastFontSize = fontSize
 
             // Update backgrounds on theme change
             textView.backgroundColor = Theme.background(isDark)
@@ -321,7 +327,7 @@ struct HighlightedTextView: NSViewRepresentable {
         let baseAttrs: [NSAttributedString.Key: Any] = [
             .foregroundColor: fgColor,
             .backgroundColor: bgColor,
-            .font: Theme.font,
+            .font: Theme.font(ofSize: fontSize),
             .paragraphStyle: style
         ]
         storage.addAttributes(baseAttrs, range: range)
@@ -331,7 +337,7 @@ struct HighlightedTextView: NSViewRepresentable {
             let repeatedAttrs: [NSAttributedString.Key: Any] = [
                 .foregroundColor: Theme.repeatedActive(isDark),
                 .backgroundColor: bgColor,
-                .font: Theme.font,
+                .font: Theme.font(ofSize: fontSize),
                 .paragraphStyle: style
             ]
             for loc in tp.repeatedWordLocations {
@@ -353,14 +359,14 @@ struct HighlightedTextView: NSViewRepresentable {
             return [
                 .foregroundColor: Theme.repeatedActive(isDark),
                 .backgroundColor: bgColor,
-                .font: Theme.font,
+                .font: Theme.font(ofSize: fontSize),
                 .paragraphStyle: style
             ]
         }
         return [
             .foregroundColor: Theme.activeText(isDark),
             .backgroundColor: bgColor,
-            .font: Theme.font,
+            .font: Theme.font(ofSize: fontSize),
             .paragraphStyle: style
         ]
     }
@@ -370,7 +376,7 @@ struct HighlightedTextView: NSViewRepresentable {
         style.lineHeightMultiple = Theme.lineHeightMult
         style.alignment = .left
         return [
-            .font: Theme.font,
+            .font: Theme.font(ofSize: fontSize),
             .foregroundColor: Theme.dimText(isDark),
             .backgroundColor: Theme.background(isDark),
             .paragraphStyle: style
@@ -384,7 +390,7 @@ struct HighlightedTextView: NSViewRepresentable {
             .foregroundColor: Theme.repeatedDim(isDark),
             .backgroundColor: Theme.background(isDark),
             .paragraphStyle: style,
-            .font: Theme.font
+            .font: Theme.font(ofSize: fontSize)
         ]
     }
 
@@ -399,7 +405,7 @@ struct HighlightedTextView: NSViewRepresentable {
         return [.foregroundColor: Theme.wordHighlightFg,
                 .backgroundColor: Theme.wordHighlight,
                 .paragraphStyle: style,
-                .font: Theme.font]
+                .font: Theme.font(ofSize: fontSize)]
     }
 
     // MARK: - Auto-scroll
@@ -432,5 +438,6 @@ struct HighlightedTextView: NSViewRepresentable {
         var lastIsDark: Bool?
         var lastShowRepeat: Bool?
         var lastNotesSig: String?
+        var lastFontSize: CGFloat?
     }
 }

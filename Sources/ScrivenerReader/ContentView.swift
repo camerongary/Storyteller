@@ -13,6 +13,7 @@ struct ContentView: View {
     @State private var isLoading = false
     @State private var showVoicePicker = false
     @AppStorage("showRepeatHighlight") private var showRepeatHighlight = false
+    @AppStorage("textSize") private var textSize: Double = 19
     @State private var showTOC = false
     @State private var currentFileURL: URL? = nil
     @State private var showNotes = false
@@ -83,7 +84,8 @@ struct ContentView: View {
                         onAddNote: { range, isRevision in
                             beginNote(kind: isRevision ? .revision : .comment, range: range)
                         },
-                        proxy: textProxy
+                        proxy: textProxy,
+                        fontSize: CGFloat(textSize)
                     )
                     .background(Color(nsColor: Theme.background(isDark)))
 
@@ -415,7 +417,9 @@ struct ContentView: View {
             .toggleTOCRequested, .toggleNotesRequested,
             .addCommentRequested, .addRevisionRequested, .exportNotesRequested,
             .findRequested, .findNextRequested, .findPreviousRequested,
-            .useSelectionForFindRequested, .exportAudioRequested
+            .useSelectionForFindRequested, .exportAudioRequested,
+            .printRequested, .textBiggerRequested, .textSmallerRequested,
+            .textActualSizeRequested
         ]
         return Publishers.MergeMany(
             names.map { name in
@@ -445,8 +449,33 @@ struct ContentView: View {
         case .findPreviousRequested: textProxy.performFind(.previousMatch)
         case .useSelectionForFindRequested: textProxy.performFind(.setSearchString)
         case .exportAudioRequested: exportAudio()
+        case .printRequested:       printDocument()
+        case .textBiggerRequested:     textSize = min(36, textSize + 1)
+        case .textSmallerRequested:    textSize = max(12, textSize - 1)
+        case .textActualSizeRequested: textSize = 19
         default: break
         }
+    }
+
+    /// Print the document as clean black-on-white pages — never the dimmed
+    /// on-screen theme colors.
+    private func printDocument() {
+        guard let tp = textProcessor else { return }
+        let info = NSPrintInfo.shared
+        info.horizontalPagination = .fit
+        info.verticalPagination = .automatic
+        let width = info.paperSize.width - info.leftMargin - info.rightMargin
+        let printView = NSTextView(frame: NSRect(x: 0, y: 0, width: width, height: 100))
+        let style = NSMutableParagraphStyle()
+        style.lineHeightMultiple = 1.3
+        printView.textStorage?.setAttributedString(NSAttributedString(
+            string: tp.fullText,
+            attributes: [.font: Theme.font(ofSize: 12),
+                         .foregroundColor: NSColor.black,
+                         .paragraphStyle: style]))
+        let op = NSPrintOperation(view: printView, printInfo: info)
+        op.jobTitle = fileName.isEmpty ? "Storyteller" : fileName
+        op.run()
     }
 
     /// When playback isn't actively running, word highlights don't drive
@@ -661,7 +690,11 @@ struct ContentView: View {
         fileName = url.lastPathComponent
         showTOC = false
         currentFileURL = url
-        RecentFilesManager.shared.add(url)
+        // Temp files (e.g. text sent via the "Read in Storyteller" service)
+        // don't belong in Open Recent.
+        if !url.path.hasPrefix(FileManager.default.temporaryDirectory.path) {
+            RecentFilesManager.shared.add(url)
+        }
         // Window title + proxy icon — shows in Mission Control, Exposé, and title bar
         NSApp.keyWindow?.title = url.deletingPathExtension().lastPathComponent
         NSApp.keyWindow?.representedURL = url
