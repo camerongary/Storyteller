@@ -19,6 +19,7 @@ struct ContentView: View {
     @State private var showNotes = false
     @State private var noteDraft: NoteDraft? = nil
     @State private var textProxy = TextViewProxy()
+    @State private var lastLoadTime = Date.distantPast
     @Environment(\.openWindow) private var openWindow
     @Environment(\.colorScheme) var colorScheme
 
@@ -685,6 +686,10 @@ struct ContentView: View {
     }
 
     private func loadFile(url: URL) {
+        // The same open can arrive via both the app delegate and onOpenURL —
+        // ignore an identical request landing within a couple of seconds.
+        if url == currentFileURL, Date().timeIntervalSince(lastLoadTime) < 2 { return }
+        lastLoadTime = Date()
         speech.stop()
         isLoading = true
         fileName = url.lastPathComponent

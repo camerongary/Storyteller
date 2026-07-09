@@ -19,11 +19,13 @@ struct ScrivenerReaderApp: App {
         WindowGroup {
             ContentView()
                 .frame(minWidth: 700, minHeight: 500)
-                .onOpenURL { url in
-                    NotificationCenter.default.post(name: .openFileURL, object: url)
-                }
         }
         .windowStyle(.hiddenTitleBar)
+        // File opens are handled by the AppDelegate (application(_:open:)) and
+        // routed by notification into the existing window. Claiming external
+        // events here would make SwiftUI spawn a second, blank window when the
+        // app is launched with a file (e.g. compiled from Scrivener).
+        .handlesExternalEvents(matching: [])
         .commands {
             // ── File menu ─────────────────────────────────────────────────────
             CommandGroup(replacing: .newItem) {}
@@ -206,19 +208,53 @@ struct ScrivenerReaderApp: App {
 // MARK: - App Delegate (receives files opened by Scrivener / Finder)
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// File handed to us at launch, buffered until ContentView is listening.
+    /// The open event often arrives before the SwiftUI view subscribes to
+    /// notifications, which used to leave a blank window at launch.
+    var pendingURL: URL?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.servicesProvider = self
         NSUpdateDynamicServices()
+        settleWindowsAndDeliver()
+    }
+
+    /// SwiftUI spawns an extra window for external open events (both at cold
+    /// launch and while running). After things settle: close the duplicates,
+    /// then deliver any pending file to the surviving window — the immediate
+    /// notification can be missed (cold launch) or land in a window that gets
+    /// closed, so the survivor is fed explicitly.
+    private func settleWindowsAndDeliver() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            Self.closeDuplicateMainWindows()
+            if let url = self?.pendingURL {
+                self?.pendingURL = nil
+                NotificationCenter.default.post(name: .openFileURL, object: url)
+            }
+        }
+    }
+
+    private static func closeDuplicateMainWindows() {
+        let mains = NSApp.windows.filter {
+            $0.isVisible && $0.styleMask.contains(.closable) && $0.frame.width >= 500
+        }
+        guard mains.count > 1 else { return }
+        let keep = NSApp.mainWindow ?? mains.first!
+        for w in mains where w !== keep { w.close() }
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
         guard let url = urls.first else { return }
+        pendingURL = url
         NotificationCenter.default.post(name: .openFileURL, object: url)
+        settleWindowsAndDeliver()
     }
 
     func application(_ sender: NSApplication, openFile filename: String) -> Bool {
         let url = URL(fileURLWithPath: filename)
+        pendingURL = url
         NotificationCenter.default.post(name: .openFileURL, object: url)
+        settleWindowsAndDeliver()
         return true
     }
 
