@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/icon.png" width="128" alt="Storyteller icon">
+</p>
+
 # Storyteller
 
 A macOS text-to-speech reader for writers. Open a `.txt`, `.rtf`, `.epub`, or `.pdf` file and have it read aloud with word-by-word and sentence highlighting. Designed to work alongside [Scrivener](https://www.literatureandlatte.com/scrivener/overview) as an external editor, but works with any supported file.
